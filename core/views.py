@@ -2,6 +2,9 @@ from rest_framework import generics
 from rest_framework.exceptions import PermissionDenied, NotFound
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from django.contrib.auth import get_user_model
+
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from .models import AcademicYear, Semester, Program, Module, CourseAllocation, Course
 from .serializers import (
     ModuleWriteSerializer,
@@ -190,7 +193,7 @@ class ModuleRetrieveDestroyAPIView(generics.RetrieveDestroyAPIView):
 
 
 ### course views
-
+@method_decorator(cache_page(60), name='dispatch')
 class CourseListAPIView(generics.ListAPIView):
     serializer_class = CourseListSerializer
     permission_classes = [IsAdminUser]

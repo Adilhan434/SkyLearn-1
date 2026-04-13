@@ -3,10 +3,14 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views import defaults as default_views
+from django.http import JsonResponse
 
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 admin.site.site_header = "SkyLearn Admin"
+def home(request):
+    return JsonResponse({"message": "API is running 🚀"})
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -22,8 +26,8 @@ urlpatterns = [
     path("result/", include("result.urls")), 
     path("attendance/", include("attendance.urls")),
     path("finance/", include("finance.urls")),
+    path("", home),
 ]
-
 if settings.DEBUG:
     # Include django_browser_reload URLs only in DEBUG mode
     urlpatterns += [

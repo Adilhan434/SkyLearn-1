@@ -2,7 +2,7 @@ from django.test import TestCase
 from accounts.filters import LecturerFilter, StudentFilter
 from accounts.models import User, Student
 from course.models import Program
-
+from core.models import Program
 
 class LecturerFilterTestCase(TestCase):
     def setUp(self):

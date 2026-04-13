@@ -5,6 +5,10 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.exceptions import PermissionDenied
 from django.db.models import Sum
 
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from .tasks import send_payment_notification
+
 from accounts.models import Student
 from .models import Invoice, Payment
 from .serializers import (
@@ -15,11 +19,10 @@ from .serializers import (
     StudentBalanceSerializer,
 )
 from .permissions import IsStudentOwner
-
-
+from django.core.cache import cache
 # ===================== Admin: Invoices =====================
 
-
+@method_decorator(cache_page(60), name='dispatch')
 class InvoiceListAPIView(generics.ListAPIView):
     serializer_class = InvoiceListSerializer
     permission_classes = [IsAdminUser]
@@ -27,7 +30,9 @@ class InvoiceListAPIView(generics.ListAPIView):
     def get_queryset(self):
         if not self.request.user.is_superuser:
             raise PermissionDenied("Only admins can access this view.")
-        qs = Invoice.objects.filter(admin=self.request.user)
+        qs = Invoice.objects.filter(admin=self.request.user).select_related(
+            "student",
+            "invoice",)
         student_id = self.request.query_params.get("student")
         status = self.request.query_params.get("status")
         if student_id:
@@ -85,7 +90,7 @@ class InvoiceDeleteAPIView(generics.DestroyAPIView):
 
 # ===================== Admin: Payments =====================
 
-
+@method_decorator(cache_page(60), name='dispatch')
 class PaymentListAPIView(generics.ListAPIView):
     serializer_class = PaymentListSerializer
     permission_classes = [IsAdminUser]
@@ -99,18 +104,25 @@ class PaymentListAPIView(generics.ListAPIView):
             qs = qs.filter(student_id=student_id)
         return qs
 
-
 class PaymentCreateAPIView(generics.CreateAPIView):
     serializer_class = PaymentWriteSerializer
     permission_classes = [IsAdminUser]
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        if not self.request.user.is_superuser:
-            raise PermissionDenied("Only admins can access this view.")
         context["admin"] = self.request.user
         return context
 
+    def perform_create(self, serializer):
+        payment = serializer.save(admin=self.request.user)
+
+        cache.delete(f"student_balance_{payment.student_id}")
+
+        send_payment_notification.delay(
+            payment.id,
+            payment.student.id,
+            payment.amount
+        )
 
 class PaymentDeleteAPIView(generics.DestroyAPIView):
     permission_classes = [IsAdminUser]
@@ -122,13 +134,17 @@ class PaymentDeleteAPIView(generics.DestroyAPIView):
 
     def perform_destroy(self, instance):
         invoice = instance.invoice
+        student_id = instance.student_id
+
         instance.delete()
         invoice.update_status()
 
+        cache_key = f"student_balance_{student_id}"
+        cache.delete(cache_key)
 
 # ===================== Admin: Student Balance =====================
 
-
+@method_decorator(cache_page(60), name='dispatch')
 class StudentBalanceAPIView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -136,22 +152,33 @@ class StudentBalanceAPIView(APIView):
         if not request.user.is_superuser:
             raise PermissionDenied("Only admins can access this view.")
 
+        cache_key = f"student_balance_{pk}"
+
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+
         try:
             student = Student.objects.get(pk=pk, admin=request.user)
         except Student.DoesNotExist:
             return Response({"detail": "Student not found."}, status=404)
 
         total_charged = (
-            Invoice.objects.filter(student=student, admin=request.user).aggregate(
-                total=Sum("amount")
-            )["total"]
-            or 0
+                Invoice.objects.filter(
+                    student=student,
+                    admin=request.user
+                ).only("amount").aggregate(
+                    total=Sum("amount")
+                )["total"] or 0
         )
+
         total_paid = (
-            Payment.objects.filter(student=student, admin=request.user).aggregate(
-                total=Sum("amount")
-            )["total"]
-            or 0
+                Payment.objects.filter(
+                    student=student,
+                    admin=request.user
+                ).only("amount").aggregate(
+                    total=Sum("amount")
+                )["total"] or 0
         )
 
         data = {
@@ -161,9 +188,10 @@ class StudentBalanceAPIView(APIView):
             "total_paid": total_paid,
             "balance": total_charged - total_paid,
         }
-        serializer = StudentBalanceSerializer(data)
-        return Response(serializer.data)
 
+        cache.set(cache_key, data, timeout=60)  # ⬅ кеш на 60 секунд
+
+        return Response(data)
 
 # ===================== Student: My Finance =====================
 

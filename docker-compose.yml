@@ -1,0 +1,66 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_DB: su_lms
+      POSTGRES_USER: su_user
+      POSTGRES_PASSWORD: 1234
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: .
+    container_name: django_backend
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DEBUG=True
+      - DB_NAME=su_lms
+      - DB_USER=su_user
+      - DB_PASSWORD=1234
+      - DB_HOST=db
+      - DB_PORT=5432
+
+  celery:
+    build: .
+    container_name: celery_worker
+    command: celery -A config worker -l info
+    volumes:
+      - .:/app
+    depends_on:
+      - backend
+      - redis
+
+  celery-beat:
+    build: .
+    container_name: celery_beat
+    command: celery -A config beat -l info
+    volumes:
+      - .:/app
+    depends_on:
+      - backend
+      - redis
+
+volumes:
+  postgres_data:
