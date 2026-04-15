@@ -21,14 +21,17 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config(
-    "SECRET_KEY", default="o!ld8nrt4vc*h1zoey*wj48x*q0#ss12h=+zh)kk^6b3aygg=!"
-)
+# Default is only for local development. In production SECRET_KEY env var is required.
+SECRET_KEY = config("SECRET_KEY", default="django-insecure-dev-only-change-me-in-production")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=True, cast=bool)
 
-ALLOWED_HOSTS = ["127.0.0.1", "adilmohak1.pythonanywhere.com", "localhost"]
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS",
+    default="127.0.0.1,localhost",
+    cast=lambda v: [s.strip() for s in v.split(",")],
+)
 
 # change the default user models to our custom model
 AUTH_USER_MODEL = "accounts.User"
@@ -77,16 +80,15 @@ PROJECT_APPS = [
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware", 
-    'corsheaders.middleware.CorsMiddleware',  
-    'django.middleware.common.CommonMiddleware', 
 ]
 if DEBUG:
     # Add django_browser_reload middleware only in DEBUG mode
@@ -99,10 +101,11 @@ from datetime import timedelta
 # CORS Settings - Important for cookie-based auth
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in development
 if not DEBUG:
-    CORS_ALLOWED_ORIGINS = [
-        "https://yourdomain.com",  # Add your production frontend URL
-        "https://www.yourdomain.com",
-    ]
+    CORS_ALLOWED_ORIGINS = config(
+        "CORS_ALLOWED_ORIGINS",
+        default="",
+        cast=lambda v: [s.strip() for s in v.split(",") if s.strip()],
+    )
 
 CORS_ALLOW_CREDENTIALS = True  # Required for cookies
 CORS_ALLOW_HEADERS = [
@@ -119,7 +122,7 @@ CORS_ALLOW_HEADERS = [
 
 # JWT Settings with Cookie support
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=5),  # Shorter for better security
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # 7 days
     'ROTATE_REFRESH_TOKENS': True,  # Enable token rotation for better security
     'BLACKLIST_AFTER_ROTATION': True,
@@ -147,6 +150,15 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
+        'auth': '5/minute',
+    },
 }
 
 SPECTACULAR_SETTINGS = {
@@ -265,9 +277,9 @@ EMAIL_BACKEND = config(
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = config("EMAIL_PORT", default=587)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
-EMAIL_HOST_USER = config("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
-EMAIL_FROM_ADDRESS = config("EMAIL_FROM_ADDRESS")
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_FROM_ADDRESS = config("EMAIL_FROM_ADDRESS", default="")
 EMAIL_USE_SSL = False
 
 # crispy config
@@ -339,3 +351,38 @@ SEMESTER_CHOICES = (
     (SECOND, _("Second")),
     (THIRD, _("Third")),
 )
+
+# ==============================================================================
+# SECURITY SETTINGS
+# ==============================================================================
+
+if not DEBUG:
+    # HTTPS / HSTS
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+    # Cookie security
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    # Prevent content-type sniffing
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+
+    # Referrer policy
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+    # X-Frame-Options (clickjacking protection) — already via middleware, but explicit
+    X_FRAME_OPTIONS = "DENY"
+
+    # Proxy SSL header (if behind a reverse proxy like nginx)
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+else:
+    # Development defaults
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "same-origin"
+    X_FRAME_OPTIONS = "DENY"

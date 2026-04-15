@@ -11,6 +11,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.response import Response
 from rest_framework import status
 
+from .throttling import AuthRateThrottle
+
 
 
 from .models import Lecturer, Student, User, Group, Parent
@@ -213,7 +215,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
-    
+    throttle_classes = [AuthRateThrottle]
+
     def post(self, request, *args, **kwargs):
         """
         Secure login that sets tokens in httpOnly cookies
@@ -270,6 +273,8 @@ class SecureTokenRefreshView(TokenRefreshView):
     """
     Secure token refresh that uses httpOnly cookies
     """
+    throttle_classes = [AuthRateThrottle]
+
     def post(self, request, *args, **kwargs):
         # Get refresh token from cookie
         refresh_token = request.COOKIES.get(
