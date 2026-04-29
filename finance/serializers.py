@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.db.models import Sum
-from .models import Invoice, Payment
+from .models import Invoice, Payment, Contract
+from accounts.models import Student
 
 
 class InvoiceListSerializer(serializers.ModelSerializer):
@@ -64,6 +65,8 @@ class PaymentListSerializer(serializers.ModelSerializer):
 
 
 class PaymentWriteSerializer(serializers.ModelSerializer):
+    student = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all(), required=False)
+
     class Meta:
         model = Payment
         fields = ["invoice", "student", "amount", "payment_method", "receipt", "status", "comment"]
@@ -73,6 +76,26 @@ class PaymentWriteSerializer(serializers.ModelSerializer):
         payment = Payment.objects.create(admin=admin, **validated_data)
         payment.invoice.update_status()
         return payment
+
+
+class ContractSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source="student.get_full_name", read_only=True)
+
+    class Meta:
+        model = Contract
+        fields = [
+            "id",
+            "student",
+            "student_name",
+            "contract_number",
+            "title",
+            "amount",
+            "start_date",
+            "end_date",
+            "document",
+            "is_active",
+            "created_at",
+        ]
 
 
 class StudentBalanceSerializer(serializers.Serializer):

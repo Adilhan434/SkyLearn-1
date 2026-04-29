@@ -4,13 +4,15 @@ from .views import (
     CustomTokenObtainPairView,
     SecureTokenRefreshView,
     UserProfileView,
+    AdminStatsView,
+    LogoutView,
 
-    LecturerCreateView, 
+    LecturerCreateView,
     LecturerListAPIView,
     LecturerRetrieveDestroyView,
     LecturerUpdateView,
 
-    StudentCreateView, 
+    StudentCreateView,
     StudentListAPIView,
     StudentRetrieveUpdateDestroyView,
     StudentUpdateAPIView,
@@ -23,14 +25,19 @@ from .views import (
     ParentCreateView,
     ParentListAPIView,
     ParentRetrieveUpdateDestroyView,
-    ParentUpdateView
+    ParentUpdateView,
+
+    StaffListCreateView,
+    StaffDestroyView,
 )
 
 
 urlpatterns = [
     path('token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', SecureTokenRefreshView.as_view(), name='token_refresh'),
+    path('logout/', LogoutView.as_view(), name='logout'),
     path('profile/', UserProfileView.as_view(), name='user-profile'),
+    path('admin/stats/', AdminStatsView.as_view(), name='admin-stats'),
     # Lecturer URLs
     path('lecturers/', LecturerListAPIView.as_view(), name='lecturer-list'),
     path('lecturers/create/', LecturerCreateView.as_view(), name='lecturer-create'),
@@ -53,4 +60,7 @@ urlpatterns = [
     path('students/update/<int:pk>/', StudentUpdateAPIView.as_view(), name='student-update'),
     path('students/', StudentListAPIView.as_view(), name='student-list'),
     path('students/by-group/<int:group_id>/', StudentListGroupAPIView.as_view(), name='student-by-group'),
+    # Staff URLs
+    path('staff/', StaffListCreateView.as_view(), name='staff-list-create'),
+    path('staff/<int:pk>/', StaffDestroyView.as_view(), name='staff-destroy'),
 ]

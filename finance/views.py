@@ -6,13 +6,14 @@ from rest_framework.exceptions import PermissionDenied
 from django.db.models import Sum
 
 from accounts.models import Student
-from .models import Invoice, Payment
+from .models import Invoice, Payment, Contract
 from .serializers import (
     InvoiceListSerializer,
     InvoiceWriteSerializer,
     PaymentListSerializer,
     PaymentWriteSerializer,
     StudentBalanceSerializer,
+    ContractSerializer,
 )
 from .permissions import IsStudentOrParent, IsAccountant
 from core.models import Notification
@@ -172,7 +173,7 @@ class StudentBalanceAPIView(APIView):
 class MyInvoicesAPIView(generics.ListAPIView):
     serializer_class = InvoiceListSerializer
     permission_classes = [IsStudentOrParent]
-    
+
     def get_queryset(self):
         user = self.request.user
         if hasattr(user, 'student_profile'):
@@ -180,7 +181,11 @@ class MyInvoicesAPIView(generics.ListAPIView):
         elif user.is_parent:
             from accounts.models import Parent
             student_ids = Parent.objects.filter(user=user).values_list('student_id', flat=True)
-            return Invoice.objects.filter(student_id__in=student_ids)
+            qs = Invoice.objects.filter(student_id__in=student_ids)
+            student_param = self.request.query_params.get('student')
+            if student_param:
+                qs = qs.filter(student_id=student_param)
+            return qs
         return Invoice.objects.none()
 
 
@@ -195,7 +200,11 @@ class MyPaymentsAPIView(generics.ListAPIView):
         elif user.is_parent:
             from accounts.models import Parent
             student_ids = Parent.objects.filter(user=user).values_list('student_id', flat=True)
-            return Payment.objects.filter(student_id__in=student_ids)
+            qs = Payment.objects.filter(student_id__in=student_ids)
+            student_param = self.request.query_params.get('student')
+            if student_param:
+                qs = qs.filter(student_id=student_param)
+            return qs
         return Payment.objects.none()
 
 
@@ -251,6 +260,7 @@ class AccountantProgramsAPIView(APIView):
             data.append({
                 "id": program.id,
                 "name": program.name,
+                "tuition_fee": float(program.tuition_fee),
                 "group_count": groups.count(),
                 "student_count": student_count,
                 "total_charged": float(total_charged),
@@ -446,14 +456,33 @@ class AccountantSendDebtNotificationAPIView(APIView):
             return Response({"detail": "Student not found."}, status=404)
 
 
-# ===================== Parent: Upload Receipt =====================
+# ===================== Student/Parent: Upload Receipt =====================
 
 class ParentUploadReceiptAPIView(generics.CreateAPIView):
     serializer_class = PaymentWriteSerializer
     permission_classes = [IsStudentOrParent]
 
     def perform_create(self, serializer):
-        serializer.save(status="pending")
+        user = self.request.user
+        if hasattr(user, 'student_profile'):
+            serializer.save(status="pending", student=user.student_profile)
+        elif user.is_parent:
+            from accounts.models import Parent, Student as StudentModel
+            from rest_framework.exceptions import ValidationError
+            student_id = self.request.data.get('student')
+            if student_id:
+                parent_student_ids = Parent.objects.filter(user=user).values_list('student_id', flat=True)
+                try:
+                    student = StudentModel.objects.get(pk=student_id, pk__in=parent_student_ids)
+                    serializer.save(status="pending", student=student)
+                    return
+                except StudentModel.DoesNotExist:
+                    raise ValidationError("Student not linked to this parent account.")
+            parent = Parent.objects.filter(user=user).first()
+            if parent and parent.student:
+                serializer.save(status="pending", student=parent.student)
+            else:
+                raise ValidationError("No student linked to this parent account.")
 
 
 class AccountantBalanceListAPIView(generics.ListAPIView):
@@ -548,11 +577,65 @@ class AccountantSendDebtNotificationAPIView(APIView):
         except Student.DoesNotExist:
             return Response({"detail": "Student not found."}, status=404)
 
-# ===================== Parent: Upload Receipt =====================
 
-class ParentUploadReceiptAPIView(generics.CreateAPIView):
-    serializer_class = PaymentWriteSerializer
-    permission_classes = [IsStudentOrParent]
+# ===================== Admin: Contracts =====================
+
+
+class ContractListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = ContractSerializer
+
+    def get_permissions(self):
+        from rest_framework.permissions import IsAdminUser as _Admin
+        if self.request.method == "GET":
+            return [IsAccountant()]
+        return [_Admin()]
+
+    def get_queryset(self):
+        qs = Contract.objects.all()
+        student_id = self.request.query_params.get("student")
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        return qs
 
     def perform_create(self, serializer):
-        serializer.save(status="pending")
+        admin = self.request.user if self.request.user.is_superuser else None
+        serializer.save(admin=admin)
+
+
+class ContractDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = ContractSerializer
+    permission_classes = [IsAccountant]
+    queryset = Contract.objects.all()
+
+
+class AccountantUpdateProgramFeeAPIView(APIView):
+    """Allow accountant to update tuition fee for a program."""
+    permission_classes = [IsAccountant]
+
+    def patch(self, request, program_id):
+        from core.models import Program
+        try:
+            program = Program.objects.get(pk=program_id)
+        except Program.DoesNotExist:
+            return Response({"detail": "Program not found."}, status=404)
+
+        tuition_fee = request.data.get("tuition_fee")
+        if tuition_fee is None:
+            return Response({"detail": "tuition_fee is required."}, status=400)
+
+        try:
+            tuition_fee = float(tuition_fee)
+            if tuition_fee < 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            return Response({"detail": "Invalid tuition_fee value."}, status=400)
+
+        program.tuition_fee = tuition_fee
+        program.save(update_fields=["tuition_fee"])
+
+        return Response({
+            "status": "success",
+            "program_id": program.id,
+            "name": program.name,
+            "tuition_fee": float(program.tuition_fee),
+        })

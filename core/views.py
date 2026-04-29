@@ -3,9 +3,10 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from .models import Course, CourseAllocation, Program, AcademicYear, Semester, Module, Notification
 from .serializers import (
-    CourseSerializer, CourseAllocationSerializer, ProgramSerializer, 
+    CourseSerializer, CourseAllocationSerializer, ProgramSerializer,
     AcademicYearSerializer, SemesterSerializer, ModuleSerializer, NotificationSerializer
 )
+from .permissions import IsAdminOrMethodologist, IsAdminOrAccountant
 
 # Semester Views
 class SemesterListAPIView(generics.ListAPIView):
@@ -30,20 +31,22 @@ class SemesterRetrieveDestroyAPIView(generics.RetrieveDestroyAPIView):
 class ProgramListAPIView(generics.ListAPIView):
     queryset = Program.objects.all()
     serializer_class = ProgramSerializer
+    permission_classes = [IsAuthenticated]
 
 class ProgramCreateAPIView(generics.CreateAPIView):
     queryset = Program.objects.all()
     serializer_class = ProgramSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrMethodologist]
 
 class ProgramUpdateAPIView(generics.UpdateAPIView):
     queryset = Program.objects.all()
     serializer_class = ProgramSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrMethodologist]
 
 class ProgramRetrieveDestroyAPIView(generics.RetrieveDestroyAPIView):
     queryset = Program.objects.all()
     serializer_class = ProgramSerializer
+    permission_classes = [IsAdminOrMethodologist]
 
 # Academic Year Views
 class AcademicYearListAPIView(generics.ListAPIView):
@@ -87,15 +90,23 @@ class ModuleRetrieveDestroyAPIView(generics.RetrieveDestroyAPIView):
 class CourseListAPIView(generics.ListAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
+    permission_classes = [IsAuthenticated]
 
 class CourseCreateAPIView(generics.CreateAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrMethodologist]
+
+    def perform_create(self, serializer):
+        if self.request.user.is_superuser:
+            serializer.save(admin=self.request.user)
+        else:
+            serializer.save()
 
 class CourseRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
+    permission_classes = [IsAdminOrMethodologist]
 
 # Course Allocation Views
 class CourseAllocationListAPIView(generics.ListAPIView):
@@ -105,11 +116,12 @@ class CourseAllocationListAPIView(generics.ListAPIView):
 class CourseAllocationCreateAPIView(generics.CreateAPIView):
     queryset = CourseAllocation.objects.all()
     serializer_class = CourseAllocationSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrMethodologist]
 
 class CourseAllocationRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = CourseAllocation.objects.all()
     serializer_class = CourseAllocationSerializer
+    permission_classes = [IsAdminOrMethodologist]
 
 class TeacherCourseAllocations(generics.ListAPIView):
     serializer_class = CourseAllocationSerializer

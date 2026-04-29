@@ -87,6 +87,7 @@ PROJECT_APPS = [
     "result.apps.ResultConfig",
     "attendance.apps.AttendanceConfig",
     "finance.apps.FinanceConfig",
+    "documents",
 ]
 
 # Combine all apps

@@ -13,7 +13,7 @@ from .utils import generate_password, send_new_account_email
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["username", "first_name", "last_name", "email", "phone", "address", "gender", "date_joined", "is_lecturer", "is_student", "is_superuser", "is_parent", "is_staff", "is_accountant"]
+        fields = ["username", "first_name", "last_name", "email", "phone", "address", "gender", "date_joined", "is_lecturer", "is_student", "is_superuser", "is_parent", "is_staff", "is_accountant", "is_methodologist"]
 
 
 # ============================================================================
@@ -31,10 +31,15 @@ class LecturerListSerializer(serializers.ModelSerializer):
 
 class LecturerWriteSerializer(serializers.ModelSerializer):
     lecturer = serializers.DictField(write_only=True)
+    id = serializers.IntegerField(read_only=True)
+    lecturer_user_id = serializers.SerializerMethodField(read_only=True)
+
+    def get_lecturer_user_id(self, obj):
+        return obj.lecturer.id
 
     class Meta:
         model = Lecturer
-        fields = ["lecturer"]
+        fields = ["lecturer", "id", "lecturer_user_id"]
 
     def create(self, validated_data):
         """
@@ -46,8 +51,10 @@ class LecturerWriteSerializer(serializers.ModelSerializer):
         if not lecturer_data.get("username"):
             lecturer_data["username"] = email.split("@")[0] + "_" + str(int(__import__('time').time() * 1000))
         
-        # Генерируем пароль
-        password = generate_password()
+        # Получаем пароль или генерируем
+        password = lecturer_data.pop("password", None)
+        if not password:
+            password = generate_password()
         
         # Создаем пользователя
         user = User.objects.create_user(**lecturer_data, password=password)
@@ -129,8 +136,10 @@ class StudentWriteSerializer(serializers.ModelSerializer):
         if not student_data.get("username"):
             student_data["username"] = email.split("@")[0] + "_" + str(int(__import__('time').time() * 1000))
         
-        # Генерируем пароль
-        password = generate_password()
+        # Получаем пароль или генерируем
+        password = student_data.pop("password", None)
+        if not password:
+            password = generate_password()
         
         # Создаем пользователя
         user = User.objects.create_user(**student_data, password=password)
@@ -208,22 +217,25 @@ class ParentWriteSerializer(serializers.ModelSerializer):
         """
         user_data = validated_data.pop("user", {})
         
-        # Если данные пользователя не предоставлены, используем данные родителя
-        if not user_data:
-            user_data = {
-                "first_name": validated_data.get("first_name", ""),
-                "last_name": validated_data.get("last_name", ""),
-                "email": validated_data.get("email", ""),
-                "phone": validated_data.get("phone", ""),
-            }
+        # Если данные пользователя не предоставлены полностью, дополняем из данных родителя
+        if "first_name" not in user_data:
+            user_data["first_name"] = validated_data.get("first_name", "")
+        if "last_name" not in user_data:
+            user_data["last_name"] = validated_data.get("last_name", "")
+        if "email" not in user_data:
+            user_data["email"] = validated_data.get("email", "")
+        if "phone" not in user_data:
+            user_data["phone"] = validated_data.get("phone", "")
         
         # Генерируем username если не предоставлен
         email = user_data.get("email") or validated_data.get("email", "")
         if not user_data.get("username"):
             user_data["username"] = email.split("@")[0] + "_parent_" + str(int(__import__('time').time() * 1000))
         
-        # Генерируем пароль
-        password = generate_password()
+        # Получаем пароль или генерируем
+        password = user_data.pop("password", None)
+        if not password:
+            password = generate_password()
         
         # Создаем пользователя
         user = User.objects.create_user(**user_data, password=password)
@@ -300,12 +312,50 @@ class GroupWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
         fields = ["name", "program"]
-    
+
     def update(self, instance, validated_data):
-        """
-        Автоматически устанавливаем не трогая админ
-        """
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         return instance
+
+
+# ============================================================================
+# Staff SERIALIZERS (accountant / methodologist)
+# ============================================================================
+
+class StaffListSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ["id", "first_name", "last_name", "email", "phone", "date_joined", "role"]
+
+    def get_role(self, obj):
+        if obj.is_accountant:
+            return "accountant"
+        if obj.is_methodologist:
+            return "methodologist"
+        return "unknown"
+
+
+class StaffCreateSerializer(serializers.ModelSerializer):
+    role = serializers.ChoiceField(choices=["accountant", "methodologist"], write_only=True)
+    password = serializers.CharField(write_only=True, min_length=6)
+
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "email", "phone", "role", "password"]
+
+    def create(self, validated_data):
+        role = validated_data.pop("role")
+        password = validated_data.pop("password")
+        email = validated_data.get("email", "")
+        validated_data["username"] = email.split("@")[0] + "_" + str(int(__import__("time").time() * 1000))
+        user = User.objects.create_user(**validated_data, password=password)
+        if role == "accountant":
+            user.is_accountant = True
+        elif role == "methodologist":
+            user.is_methodologist = True
+        user.save()
+        return user

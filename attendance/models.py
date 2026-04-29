@@ -67,6 +67,12 @@ class ScheduleItem(models.Model):
         null=True,
         blank=True
     )
+    room = models.CharField(
+        max_length=50,
+        help_text="Номер кабинета / аудитории",
+        null=True,
+        blank=True
+    )
     admin = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 

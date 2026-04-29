@@ -1,5 +1,22 @@
 from rest_framework import permissions
 
+
+class IsMethodologist(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated
+            and (request.user.is_methodologist or request.user.is_superuser)
+        )
+
+
+class IsAdminOrMethodologist(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated
+            and (request.user.is_superuser or request.user.is_methodologist)
+        )
+
+
 class IsLecturer(permissions.BasePermission):
     """
     Permission check for lecturer users
@@ -13,9 +30,17 @@ class IsAdminOrLecturer(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         return bool(
-            request.user and 
-            request.user.is_authenticated and 
+            request.user and
+            request.user.is_authenticated and
             (request.user.is_staff or request.user.is_lecturer)
+        )
+
+
+class IsAdminOrAccountant(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated
+            and (request.user.is_superuser or getattr(request.user, 'is_accountant', False))
         )
 
 

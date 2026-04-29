@@ -19,7 +19,7 @@ from .serializers import (
     LecturerWriteSerializer,
     LecturerUpdateSerializer,
 
-    StudentListSerializer, 
+    StudentListSerializer,
     StudentWriteSerializer,
     StudentUpdateSerializer,
     StudentListByGroupSerializer,
@@ -30,8 +30,12 @@ from .serializers import (
     ParentListSerializer,
     ParentWriteSerializer,
     ParentUpdateSerializer,
-    UserSerializer
+    UserSerializer,
+
+    StaffListSerializer,
+    StaffCreateSerializer,
 )
+from django.db.models import Q
 
 
 
@@ -192,6 +196,31 @@ class ParentUpdateView(generics.UpdateAPIView):
 
 
 # ============================================================================
+# Staff views (accountant / methodologist)
+# ============================================================================
+
+class StaffListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return User.objects.filter(
+            Q(is_accountant=True) | Q(is_methodologist=True)
+        ).order_by("-date_joined")
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return StaffCreateSerializer
+        return StaffListSerializer
+
+
+class StaffDestroyView(generics.DestroyAPIView):
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return User.objects.filter(Q(is_accountant=True) | Q(is_methodologist=True))
+
+
+# ============================================================================
 # Token views
 # ============================================================================
 
@@ -206,6 +235,23 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
+        # Пользователи вводят email для входа, но SimpleJWT ищет по username.
+        # Ищем пользователя по email и подставляем настоящий username.
+        username_field = self.username_field  # usually 'username'
+        login_value = attrs.get(username_field, '')
+        
+        from accounts.models import User as UserModel
+        try:
+            user = UserModel.objects.get(email__iexact=login_value)
+            attrs[username_field] = user.username
+        except UserModel.DoesNotExist:
+            # Может быть, пользователь ввёл именно username — оставляем как есть
+            pass
+        except UserModel.MultipleObjectsReturned:
+            # Если несколько пользователей с одним email, берём первого
+            user = UserModel.objects.filter(email__iexact=login_value).first()
+            attrs[username_field] = user.username
+        
         data = super().validate(attrs)
         # Добавляем информацию о пользователе в ответ
         data['user'] = UserSerializer(self.user).data
@@ -341,6 +387,27 @@ class SecureTokenRefreshView(TokenRefreshView):
             )
 
 
+class LogoutView(APIView):
+    """
+    Clear httpOnly auth cookies to log the user out.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        response = Response({'message': 'Logged out successfully'}, status=status.HTTP_200_OK)
+        response.delete_cookie(
+            settings.SIMPLE_JWT.get('AUTH_COOKIE', 'access_token'),
+            path='/',
+            domain=settings.SIMPLE_JWT.get('AUTH_COOKIE_DOMAIN'),
+        )
+        response.delete_cookie(
+            settings.SIMPLE_JWT.get('AUTH_COOKIE_REFRESH', 'refresh_token'),
+            path='/',
+            domain=settings.SIMPLE_JWT.get('AUTH_COOKIE_DOMAIN'),
+        )
+        return response
+
+
 class UserProfileView(APIView):
     """
     Возвращает профиль текущего пользователя
@@ -350,7 +417,10 @@ class UserProfileView(APIView):
     def get(self, request):
         serializer = UserSerializer(request.user)
         data = serializer.data
-        
+        # expose user id so the frontend can route by it
+        data["id"] = request.user.id
+        data["full_name"] = request.user.get_full_name()
+
         # Если это студент, добавляем данные студента
         if request.user.is_student and hasattr(request.user, 'student_profile'):
             student = request.user.student_profile
@@ -361,5 +431,73 @@ class UserProfileView(APIView):
             parents = Parent.objects.filter(user=request.user)
             children = [p.student for p in parents if p.student]
             data['children'] = StudentListSerializer(children, many=True).data
-            
+
         return Response(data)
+
+
+class AdminStatsView(APIView):
+    """Counts and recent activity for the admin dashboard."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from core.models import (
+            Program, AcademicYear, Semester, Course, CourseAllocation, Notification
+        )
+        from attendance.models import LessonTime, ScheduleItem
+        from finance.models import Invoice, Contract, Payment
+        from result.models import Grade_semester
+
+        admin = request.user
+
+        counts = {
+            "lecturers": Lecturer.objects.filter(admin=admin).count(),
+            "students": Student.objects.filter(admin=admin).count(),
+            "groups": Group.objects.filter(admin=admin).count(),
+            "parents": Parent.objects.filter(admin=admin).count(),
+            "programs": Program.objects.count(),
+            "academic_years": AcademicYear.objects.count(),
+            "semesters": Semester.objects.count(),
+            "courses": Course.objects.count(),
+            "course_allocations": CourseAllocation.objects.count(),
+            "schedule_items": ScheduleItem.objects.count(),
+            "lesson_times": LessonTime.objects.filter(admin=admin).count(),
+            "invoices": Invoice.objects.filter(admin=admin).count(),
+            "pending_invoices": Invoice.objects.filter(admin=admin, status="pending").count(),
+            "contracts": Contract.objects.count(),
+            "payments": Payment.objects.filter(admin=admin).count(),
+            "pending_payments": Payment.objects.filter(status="pending").count(),
+            "grades": Grade_semester.objects.count(),
+            "notifications": Notification.objects.filter(recipient=admin).count(),
+        }
+
+        # Recent activity: most recently created items across the system.
+        recent = []
+        for lect in Lecturer.objects.filter(admin=admin).select_related("lecturer").order_by("-id")[:3]:
+            recent.append({
+                "type": "ADD",
+                "model": "Lecturer",
+                "name": lect.lecturer.get_full_name() or lect.lecturer.username,
+                "time": lect.lecturer.date_joined.isoformat() if lect.lecturer.date_joined else None,
+                "color": "emerald",
+            })
+        for st in Student.objects.filter(admin=admin).select_related("student").order_by("-id")[:3]:
+            recent.append({
+                "type": "ADD",
+                "model": "Student",
+                "name": st.student.get_full_name() or st.student.username,
+                "time": st.student.date_joined.isoformat() if st.student.date_joined else None,
+                "color": "emerald",
+            })
+        for inv in Invoice.objects.filter(admin=admin).order_by("-created_at")[:2]:
+            recent.append({
+                "type": "ADD",
+                "model": "Invoice",
+                "name": f"{inv.title} — {inv.student.get_full_name()}",
+                "time": inv.created_at.isoformat(),
+                "color": "amber",
+            })
+        # sort by time desc, drop None times to the end
+        recent.sort(key=lambda r: r["time"] or "", reverse=True)
+        recent = recent[:6]
+
+        return Response({"counts": counts, "recent": recent})

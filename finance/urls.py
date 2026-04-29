@@ -2,6 +2,10 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # Admin: Contracts
+    path("contracts/", views.ContractListCreateAPIView.as_view(), name="contract-list-create"),
+    path("contracts/<int:pk>/", views.ContractDetailAPIView.as_view(), name="contract-detail"),
+
     # Admin: Invoices
     path("invoices/", views.InvoiceListAPIView.as_view(), name="invoice-list"),
     path("invoices/create/", views.InvoiceCreateAPIView.as_view(), name="invoice-create"),
@@ -33,4 +37,5 @@ urlpatterns = [
     path("accountant/payments/pending/", views.AccountantPendingPaymentsAPIView.as_view(), name="accountant-pending-payments"),
     path("accountant/payments/<int:pk>/verify/", views.AccountantVerifyPaymentAPIView.as_view(), name="accountant-verify-payment"),
     path("accountant/notifications/send-debt/", views.AccountantSendDebtNotificationAPIView.as_view(), name="accountant-send-debt-notification"),
+    path("accountant/programs/<int:program_id>/update-fee/", views.AccountantUpdateProgramFeeAPIView.as_view(), name="accountant-update-program-fee"),
 ]

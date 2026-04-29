@@ -68,6 +68,10 @@ class Program(models.Model):
         blank=True
     )
     name = models.CharField(max_length=200)
+    tuition_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Tuition fee per semester in KGS"
+    )
 
 
     class Meta:

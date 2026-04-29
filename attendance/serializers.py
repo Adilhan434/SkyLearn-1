@@ -33,7 +33,7 @@ class ScheduleItemSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'course', 'course_title',
             'group', 'group_name', 'lesson_time', 'lesson_order',
-            'day', 'date', 'start_time', 'end_time'
+            'day', 'date', 'room', 'start_time', 'end_time'
         ]
     
     def create(self, validated_data):
@@ -53,22 +53,20 @@ class StudentScheduleItemSerializer(serializers.ModelSerializer):
     lesson_order = serializers.IntegerField(source='lesson_time.order', read_only=True)
     start_time = serializers.TimeField(source='lesson_time.start_time', read_only=True)
     end_time = serializers.TimeField(source='lesson_time.end_time', read_only=True)
-    
+
     class Meta:
         model = ScheduleItem
         fields = [
-            'id', 'course', 'course_title', 'course_code', 
+            'id', 'course', 'course_title',
             'group', 'group_name', 'lecturer_name', 'lesson_order',
-            'day', 'date', 'start_time', 'end_time'
+            'day', 'date', 'room', 'start_time', 'end_time'
         ]
         read_only_fields = ['id', 'course', 'group', 'lesson_order', 'day', 'date', 'start_time', 'end_time']
-    
+
     def get_lecturer_name(self, obj):
-        # Предполагая, что у Course есть связь с преподавателем
-        if hasattr(obj.course, 'allocated_course'):
-            allocated = obj.course.allocated_course.first()
-            if allocated and allocated.lecturer:
-                return allocated.lecturer.get_full_name
+        alloc = obj.course.course_allocations.filter(group=obj.group).first()
+        if alloc and alloc.lecturer:
+            return alloc.lecturer.get_full_name() or alloc.lecturer.username
         return None
 
 
@@ -85,7 +83,7 @@ class LecturerScheduleItemSerializer(serializers.ModelSerializer):
         model = ScheduleItem
         fields = [
             'id', 'course', 'course_title',
-            'group', 'group_name', 'lesson_order', 'day', 'date', 'start_time', 'end_time'
+            'group', 'group_name', 'lesson_order', 'day', 'date', 'room', 'start_time', 'end_time'
         ]
         read_only_fields = ['id', 'course_title', 'group_name']
 
@@ -94,22 +92,26 @@ class AdminScheduleItemSerializer(serializers.ModelSerializer):
     """Сериализатор расписания для администраторов (полный доступ)"""
     course_title = serializers.CharField(source='course.name', read_only=True)
     group_name = serializers.CharField(source='group.name', read_only=True)
+    lecturer_name = serializers.SerializerMethodField()
     lesson_order = serializers.IntegerField(source='lesson_time.order', read_only=True)
     start_time = serializers.TimeField(source='lesson_time.start_time', read_only=True)
     end_time = serializers.TimeField(source='lesson_time.end_time', read_only=True)
-    
+
     class Meta:
         model = ScheduleItem
         fields = [
             'id', 'course', 'course_title',
-            'group', 'group_name', 'lesson_time', 'lesson_order',
-            'day', 'date', 'start_time', 'end_time'
+            'group', 'group_name', 'lecturer_name', 'lesson_time', 'lesson_order',
+            'day', 'date', 'room', 'start_time', 'end_time'
         ]
-    
+
+    def get_lecturer_name(self, obj):
+        alloc = obj.course.course_allocations.filter(group=obj.group).first()
+        if alloc and alloc.lecturer:
+            return alloc.lecturer.get_full_name() or alloc.lecturer.username
+        return None
+
     def create(self, validated_data):
-        """
-        Автоматически устанавливаем admin из контекста
-        """
         admin = self.context.get('admin') or self.context.get('request').user
         validated_data['admin'] = admin
         return super().create(validated_data)

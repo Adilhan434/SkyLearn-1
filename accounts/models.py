@@ -27,6 +27,7 @@ class User(AbstractUser):
     is_parent = models.BooleanField(default=False)
     is_dep_head = models.BooleanField(default=False)
     is_accountant = models.BooleanField(default=False)
+    is_methodologist = models.BooleanField(default=False)
     gender = models.CharField(max_length=1, choices=GENDERS, blank=True, null=True)
     phone = models.CharField(max_length=60, blank=True, null=True)
     address = models.CharField(max_length=60, blank=True, null=True)
