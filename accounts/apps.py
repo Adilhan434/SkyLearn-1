@@ -5,6 +5,8 @@ class AccountsConfig(AppConfig):
     name = "accounts"
 
     def ready(self) -> None:
+        # Register drf-spectacular extensions.
+        from .api import schema  # noqa: F401
         from django.db.models.signals import post_save
         from .models import User
         from .signals import post_save_account_receiver
