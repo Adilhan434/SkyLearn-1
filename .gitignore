@@ -132,7 +132,6 @@ dmypy.json
 staticfiles/
 datadump.json
 local_note.txt
-docs/
 
 !media/
 media/*
