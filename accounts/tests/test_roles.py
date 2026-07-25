@@ -68,3 +68,65 @@ class RoleModelTests(TestCase):
     def test_role_models_are_registered_in_admin(self):
         self.assertTrue(admin.site.is_registered(Role))
         self.assertTrue(admin.site.is_registered(UserRole))
+
+
+class LegacyRoleSynchronizationTests(TestCase):
+    def test_enabling_legacy_flag_assigns_role(self):
+        user = User.objects.create_user(username="legacy-teacher")
+
+        user.is_lecturer = True
+        user.save(update_fields=["is_lecturer"])
+
+        self.assertTrue(user.roles.filter(code=RoleCode.TEACHER).exists())
+
+    def test_disabling_legacy_flag_removes_role(self):
+        user = User.objects.create_user(username="former-student")
+        user.is_student = True
+        user.save(update_fields=["is_student"])
+
+        user.is_student = False
+        user.save(update_fields=["is_student"])
+
+        self.assertFalse(user.roles.filter(code=RoleCode.STUDENT).exists())
+
+    def test_assigning_role_updates_legacy_flag(self):
+        user = User.objects.create_user(username="new-student")
+        student_role = Role.objects.get(code=RoleCode.STUDENT)
+
+        user.roles.add(student_role)
+        user.refresh_from_db()
+
+        self.assertTrue(user.is_student)
+
+    def test_removing_role_updates_legacy_flag(self):
+        user = User.objects.create_user(username="former-teacher")
+        teacher_role = Role.objects.get(code=RoleCode.TEACHER)
+        user.roles.add(teacher_role)
+
+        user.roles.remove(teacher_role)
+        user.refresh_from_db()
+
+        self.assertFalse(user.is_lecturer)
+
+    def test_direct_user_role_changes_superuser_flag(self):
+        user = User.objects.create_user(username="temporary-super-admin")
+        super_admin = Role.objects.get(code=RoleCode.SUPER_ADMIN)
+
+        assignment = UserRole.objects.create(user=user, role=super_admin)
+        user.refresh_from_db()
+        self.assertTrue(user.is_superuser)
+
+        assignment.delete()
+        user.refresh_from_db()
+        self.assertFalse(user.is_superuser)
+
+    def test_unmapped_role_does_not_change_legacy_flags(self):
+        user = User.objects.create_user(username="content-manager")
+        content_manager = Role.objects.get(code=RoleCode.CONTENT_MANAGER)
+
+        user.roles.add(content_manager)
+        user.refresh_from_db()
+
+        self.assertFalse(user.is_student)
+        self.assertFalse(user.is_lecturer)
+        self.assertFalse(user.is_superuser)
