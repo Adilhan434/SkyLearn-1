@@ -1,9 +1,8 @@
-import os
-import django
-from django.contrib.auth import authenticate
+from bootstrap import setup_django
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
+setup_django()
+
+from django.contrib.auth import authenticate
 
 user = authenticate(username='dilnaz', password='123')
 if user:

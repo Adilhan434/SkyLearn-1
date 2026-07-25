@@ -1,8 +1,6 @@
-import os
-import django
+from bootstrap import setup_django
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
+setup_django()
 
 from accounts.models import Lecturer, Student, Group
 from core.models import Course, AcademicYear

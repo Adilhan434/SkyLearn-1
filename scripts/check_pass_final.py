@@ -1,9 +1,6 @@
-import os
-import django
-from django.contrib.auth.hashers import check_password
+from bootstrap import setup_django
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
+setup_django()
 
 from accounts.models import User
 

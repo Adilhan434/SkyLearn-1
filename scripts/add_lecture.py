@@ -1,9 +1,8 @@
-import os
-import django
 from datetime import date
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
+from bootstrap import setup_django
+
+setup_django()
 
 from accounts.models import User, Group
 from core.models import Course, CourseAllocation, Semester
