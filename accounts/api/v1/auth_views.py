@@ -38,6 +38,7 @@ class LoginView(APIView):
     @extend_schema(
         request=LoginSerializer,
         responses={200: LoginResponseSerializer},
+        tags=["Auth"],
     )
     def post(self, request):
         serializer = LoginSerializer(
@@ -66,6 +67,7 @@ class RefreshView(APIView):
     @extend_schema(
         request=None,
         responses={200: MessageSerializer},
+        tags=["Auth"],
     )
     def post(self, request):
         cookie_name = settings.SIMPLE_JWT.get(
@@ -98,6 +100,7 @@ class LogoutView(APIView):
     @extend_schema(
         request=None,
         responses={200: MessageSerializer},
+        tags=["Auth"],
     )
     def post(self, request):
         cookie_name = settings.SIMPLE_JWT.get(
@@ -121,6 +124,6 @@ class LogoutView(APIView):
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: CurrentUserSerializer})
+    @extend_schema(responses={200: CurrentUserSerializer}, tags=["Auth"])
     def get(self, request):
         return Response(CurrentUserSerializer(request.user).data)

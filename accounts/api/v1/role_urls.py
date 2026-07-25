@@ -1,7 +1,10 @@
 from django.urls import path
 
+from .role_views import RoleListView
+
 
 app_name = "roles"
 
-# Role endpoints will be added with the Role and UserRole models.
-urlpatterns = []
+urlpatterns = [
+    path("", RoleListView.as_view(), name="list"),
+]

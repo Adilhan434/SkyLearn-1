@@ -176,6 +176,12 @@ SPECTACULAR_SETTINGS = {
     'TITLE': 'SU API',
     'DESCRIPTION': 'API for SU educational platform',
     'VERSION': '1.0.0',
+    'PREPROCESSING_HOOKS': [
+        'api.v1.schema.include_only_v1_endpoints',
+    ],
+    'ENUM_NAME_OVERRIDES': {
+        'RoleCodeEnum': 'accounts.models.RoleCode',
+    },
 }
 
 
