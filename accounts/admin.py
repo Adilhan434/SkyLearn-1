@@ -1,8 +1,15 @@
 from django.contrib import admin
-from .models import User, Student, Parent
+from .models import Parent, Role, Student, User, UserRole
+
+
+class UserRoleInline(admin.TabularInline):
+    model = UserRole
+    extra = 0
+    autocomplete_fields = ["role"]
 
 
 class UserAdmin(admin.ModelAdmin):
+    inlines = [UserRoleInline]
     list_display = [
         "get_full_name",
         "username",
@@ -28,6 +35,20 @@ class UserAdmin(admin.ModelAdmin):
         managed = True
         verbose_name = "User"
         verbose_name_plural = "Users"
+
+
+@admin.register(Role)
+class RoleAdmin(admin.ModelAdmin):
+    list_display = ["code", "name"]
+    search_fields = ["code", "name"]
+
+
+@admin.register(UserRole)
+class UserRoleAdmin(admin.ModelAdmin):
+    list_display = ["user", "role", "assigned_at"]
+    list_filter = ["role"]
+    search_fields = ["user__username", "user__email", "role__code"]
+    autocomplete_fields = ["user", "role"]
 
 
 admin.site.register(User, UserAdmin)

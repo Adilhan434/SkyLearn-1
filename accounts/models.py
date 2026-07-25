@@ -21,6 +21,29 @@ RELATION_SHIP = (
 GENDERS = ((_("M"), _("Male")), (_("F"), _("Female")))
 
 
+class RoleCode(models.TextChoices):
+    STUDENT = "student", _("Student")
+    TEACHER = "teacher", _("Teacher")
+    TEACHING_ASSISTANT = "teaching_assistant", _("Teaching Assistant")
+    CONTENT_MANAGER = "content_manager", _("Content Manager")
+    LMS_ADMIN = "lms_admin", _("LMS Admin")
+    SUPER_ADMIN = "super_admin", _("Super Admin")
+
+
+class Role(models.Model):
+    code = models.CharField(max_length=50, choices=RoleCode.choices, unique=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("code",)
+        verbose_name = "Role"
+        verbose_name_plural = "Roles"
+
+    def __str__(self):
+        return self.code
+
+
 class User(AbstractUser):
     is_student = models.BooleanField(default=False)
     is_lecturer = models.BooleanField(default=False)
@@ -36,6 +59,12 @@ class User(AbstractUser):
     email = models.EmailField(blank=True, null=True)
     first_name = models.CharField(max_length=120, blank=True, null=True)
     last_name = models.CharField(max_length=120, blank=True, null=True)
+    roles = models.ManyToManyField(
+        Role,
+        through="UserRole",
+        related_name="users",
+        blank=True,
+    )
 
 
     class Meta:
@@ -45,6 +74,34 @@ class User(AbstractUser):
 
     def get_full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+
+class UserRole(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="user_roles",
+    )
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.CASCADE,
+        related_name="user_roles",
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("role__code",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "role"),
+                name="unique_user_role",
+            )
+        ]
+        verbose_name = "User role"
+        verbose_name_plural = "User roles"
+
+    def __str__(self):
+        return f"{self.user} — {self.role.code}"
 
 
 class Lecturer(models.Model):
