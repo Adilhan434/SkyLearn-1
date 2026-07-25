@@ -47,6 +47,7 @@ class ApiV1RoutingTests(APITestCase):
         response = self.client.get("/api/v1/unknown/")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.json()["error"]["code"], "not_found")
 
     def test_legacy_auth_endpoint_remains_registered(self):
         response = self.client.get("/accounts/token/")
