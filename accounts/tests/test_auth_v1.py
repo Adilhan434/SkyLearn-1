@@ -115,6 +115,45 @@ class AuthV1Tests(APITestCase):
             },
         )
 
+    def test_me_returns_all_roles_in_stable_order(self):
+        self.user.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.login()
+
+        response = self.client.get(reverse("api-v1:auth:me"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["roles"], ["student", "teacher"])
+
+    def test_me_allows_missing_email_and_non_student_profile(self):
+        user = User.objects.create_user(
+            username="teacher-without-email",
+            first_name="Teacher",
+            last_name="Demo",
+        )
+        user.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(user=user)
+
+        response = self.client.get(reverse("api-v1:auth:me"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.json()["email"])
+        self.assertIsNone(response.json()["profile"])
+        self.assertEqual(response.json()["roles"], ["teacher"])
+
+    def test_me_keeps_nullable_student_profile_fields_stable(self):
+        user = User.objects.create_user(username="student-without-details")
+        user.roles.add(Role.objects.get(code=RoleCode.STUDENT))
+        Student.objects.create(student=user)
+        self.client.force_authenticate(user=user)
+
+        response = self.client.get(reverse("api-v1:auth:me"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.json()["profile"],
+            {"student_id": None, "group": None},
+        )
+
     def test_refresh_rotates_refresh_cookie_and_sets_access_cookie(self):
         login_response = self.login()
         old_refresh = login_response.cookies["refresh_token"].value

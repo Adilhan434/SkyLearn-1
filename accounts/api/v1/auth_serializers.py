@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -37,6 +38,7 @@ class LoginSerializer(serializers.Serializer):
 
 
 class LoginUserSerializer(serializers.ModelSerializer):
+    email = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
     roles = serializers.SerializerMethodField()
 
@@ -47,6 +49,9 @@ class LoginUserSerializer(serializers.ModelSerializer):
     def get_full_name(self, obj) -> str:
         return " ".join(filter(None, [obj.first_name, obj.last_name]))
 
+    def get_email(self, obj) -> str | None:
+        return obj.email or None
+
     def get_roles(self, obj) -> list[str]:
         return list(obj.roles.order_by("code").values_list("code", flat=True))
 
@@ -55,7 +60,13 @@ class LoginResponseSerializer(serializers.Serializer):
     user = LoginUserSerializer()
 
 
+class StudentProfileSerializer(serializers.Serializer):
+    student_id = serializers.CharField(allow_null=True)
+    group = serializers.CharField(allow_null=True)
+
+
 class CurrentUserSerializer(serializers.ModelSerializer):
+    email = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
     roles = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
@@ -78,12 +89,16 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     def get_full_name(self, obj) -> str:
         return " ".join(filter(None, [obj.first_name, obj.last_name]))
 
+    def get_email(self, obj) -> str | None:
+        return obj.email or None
+
     def get_roles(self, obj) -> list[str]:
         return list(obj.roles.order_by("code").values_list("code", flat=True))
 
     def get_permissions(self, obj) -> list[str]:
         return sorted(obj.get_all_permissions())
 
+    @extend_schema_field(StudentProfileSerializer(allow_null=True))
     def get_profile(self, obj) -> dict | None:
         try:
             student = obj.student_profile
