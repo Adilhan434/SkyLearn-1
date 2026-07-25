@@ -18,8 +18,25 @@ class ApiV1RoutingTests(APITestCase):
                     "auth": "/api/v1/auth/",
                     "users": "/api/v1/users/",
                     "roles": "/api/v1/roles/",
+                    "organization": "/api/v1/organization/",
+                    "courses": "/api/v1/courses/",
                 },
             },
+        )
+
+    def test_all_expected_v1_resource_prefixes_are_mounted(self):
+        from api.v1.urls import urlpatterns
+
+        mounted_prefixes = {str(pattern.pattern) for pattern in urlpatterns}
+
+        self.assertTrue(
+            {
+                "auth/",
+                "users/",
+                "roles/",
+                "organization/",
+                "courses/",
+            }.issubset(mounted_prefixes)
         )
 
     def test_api_v1_root_has_a_stable_named_route(self):
@@ -37,3 +54,8 @@ class ApiV1RoutingTests(APITestCase):
         self.assertEqual(
             response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
         )
+
+    def test_legacy_course_endpoint_remains_registered(self):
+        response = self.client.get("/api/courses/")
+
+        self.assertNotEqual(response.status_code, status.HTTP_404_NOT_FOUND)

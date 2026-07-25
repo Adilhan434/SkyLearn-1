@@ -22,6 +22,8 @@ class ApiV1RootView(APIView):
                     "auth": "/api/v1/auth/",
                     "users": "/api/v1/users/",
                     "roles": "/api/v1/roles/",
+                    "organization": "/api/v1/organization/",
+                    "courses": "/api/v1/courses/",
                 },
             }
         )
