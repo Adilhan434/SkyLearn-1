@@ -38,9 +38,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config(
-    "SECRET_KEY", default="o!ld8nrt4vc*h1zoey*wj48x*q0#ss12h=+zh)kk^6b3aygg=!"
-)
+SECRET_KEY = config("SECRET_KEY")
 
 # Use a project-specific variable name. Generic DEBUG variables are commonly set
 # by shells, IDEs and deployment tools and may contain non-boolean values.
