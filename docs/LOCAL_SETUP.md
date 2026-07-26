@@ -2,37 +2,21 @@
 
 ## 1. Требования
 
-Рекомендуемое окружение:
-
 - Python 3.12;
 - pip;
 - Git;
-- PostgreSQL 14+ — для режима, близкого к production;
-- SQLite — доступен по умолчанию и подходит для быстрого локального запуска.
-
-Проект может запускаться на других версиях Python, но основной локальной
-версией следует считать Python 3.12.
+- PostgreSQL 14+;
+- SQLite — для локального запуска.
 
 ## 2. Клонирование и виртуальное окружение
 
 ```powershell
 git clone <repository-url>
 cd su-lms-backend
-py -3.12 -m venv .venv
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-Для Linux или macOS активация выглядит так:
-
-```bash
-source .venv/bin/activate
-```
-
-Проверка версии:
-
-```powershell
-python --version
-```
 
 ## 3. Установка зависимостей
 
@@ -41,18 +25,12 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-`requirements.txt` является единственным списком зависимостей проекта.
-
 ## 4. Настройка `.env`
 
-Создайте локальный файл на основе примера:
 
 ```powershell
 Copy-Item .env.example .env
 ```
-
-`.env` исключён из Git. Не добавляйте в репозиторий реальные пароли, SMTP
-credentials, production `SECRET_KEY` и другие секреты.
 
 Минимальная конфигурация для SQLite:
 
@@ -73,22 +51,18 @@ SQLite используется по умолчанию:
 ```dotenv
 DB_ENGINE=sqlite
 ```
-
-Файл `db.sqlite3` будет создан в корне проекта после применения миграций. Он
-является локальным и не отслеживается Git.
-
 ## 6. PostgreSQL
 
 ### Создание пользователя и базы
 
-Откройте `psql` от имени администратора PostgreSQL:
+ `psql` от имени администратора PostgreSQL:
 
 ```sql
 CREATE USER su_lms_user WITH PASSWORD 'replace-with-local-password';
 CREATE DATABASE su_lms OWNER su_lms_user;
 ```
 
-Затем укажите в `.env`:
+в `.env`:
 
 ```dotenv
 DB_ENGINE=postgresql
@@ -99,7 +73,7 @@ DB_HOST=localhost
 DB_PORT=5432
 ```
 
-Для возврата на SQLite достаточно изменить:
+Для перехода на SQLite изменить:
 
 ```dotenv
 DB_ENGINE=sqlite
@@ -122,12 +96,6 @@ python manage.py check
 python manage.py migrate
 ```
 
-Проверка отсутствия незаписанных изменений моделей:
-
-```powershell
-python manage.py makemigrations accounts core attendance finance result --check --dry-run
-```
-
 ## 8. Demo seed
 
 Создание ролей, demo-пользователей и базовых профилей:
@@ -147,8 +115,6 @@ Demo credentials:
 | Teacher | `teacher@su.edu.kg` | `Demo123!` |
 | Student | `student@su.edu.kg` | `Demo123!` |
 
-Это только локальные demo credentials. Не используйте этот пароль в
-production.
 
 Другой локальный пароль можно передать явно:
 
@@ -156,9 +122,6 @@ production.
 python manage.py seed_release1 --password "AnotherDemo123!"
 ```
 
-При `DJANGO_DEBUG=False` команда блокируется. Флаг `--allow-production`
-существует только для явного контролируемого запуска и не должен применяться
-на production-системах с реальными пользователями.
 
 ## 9. Запуск сервера
 
