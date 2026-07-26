@@ -1,7 +1,7 @@
 from django.test import TestCase
 from accounts.filters import LecturerFilter, StudentFilter
-from accounts.models import User, Student
-from course.models import Program
+from accounts.models import Group, User, Student
+from core.models import Program
 
 
 class LecturerFilterTestCase(TestCase):
@@ -59,16 +59,12 @@ class LecturerFilterTestCase(TestCase):
 
 class StudentFilterTestCase(TestCase):
     def setUp(self):
-        program1 = Program.objects.create(
-            title="Computer Science", summary="Program for computer science students"
-        )
-        program2 = Program.objects.create(
-            title="Mathematics", summary="Program for mathematics students"
-        )
-        program3 = Program.objects.create(
-            title="Computer Engineering",
-            summary="Program for computer engineering students",
-        )
+        program1 = Program.objects.create(name="Computer Science")
+        program2 = Program.objects.create(name="Mathematics")
+        program3 = Program.objects.create(name="Computer Engineering")
+        group1 = Group.objects.create(name="CS-1", program=program1)
+        group2 = Group.objects.create(name="MATH-1", program=program2)
+        group3 = Group.objects.create(name="CE-1", program=program3)
 
         Student.objects.create(
             student=User.objects.create(
@@ -77,7 +73,7 @@ class StudentFilterTestCase(TestCase):
                 last_name="Doe",
                 email="john@example.com",
             ),
-            program=program1,
+            group=group1,
         )
         Student.objects.create(
             student=User.objects.create(
@@ -86,7 +82,7 @@ class StudentFilterTestCase(TestCase):
                 last_name="Williams",
                 email="jane@example.com",
             ),
-            program=program2,
+            group=group2,
         )
         Student.objects.create(
             student=User.objects.create(
@@ -95,7 +91,7 @@ class StudentFilterTestCase(TestCase):
                 last_name="Smith",
                 email="alice@example.com",
             ),
-            program=program3,
+            group=group3,
         )
 
     def test_name_filter(self):
@@ -111,5 +107,7 @@ class StudentFilterTestCase(TestCase):
         )  # All students should be returned since all have email addresses with "example.com"
 
     def test_program_filter(self):
-        filter_set = StudentFilter(data={"program__title": "Computer Science"})
-        self.assertEqual(len(filter_set.qs), 3)
+        filter_set = StudentFilter(
+            data={"program": "Computer Science"}, queryset=Student.objects.all()
+        )
+        self.assertEqual(len(filter_set.qs), 1)

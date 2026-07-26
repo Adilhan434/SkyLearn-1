@@ -29,6 +29,7 @@ django.template.context.BaseContext.__copy__ = fixed_base_context_copy
 
 from decouple import config
 from django.utils.translation import gettext_lazy as _
+from config.database import build_database_config
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,12 +38,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config(
-    "SECRET_KEY", default="o!ld8nrt4vc*h1zoey*wj48x*q0#ss12h=+zh)kk^6b3aygg=!"
-)
+SECRET_KEY = config("SECRET_KEY")
 
+# Use a project-specific variable name. Generic DEBUG variables are commonly set
+# by shells, IDEs and deployment tools and may contain non-boolean values.
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config("DEBUG", default=True, cast=bool)
+DEBUG = config("DJANGO_DEBUG", default=True, cast=bool)
 
 ALLOWED_HOSTS = ["127.0.0.1", "adilmohak1.pythonanywhere.com", "localhost"]
 
@@ -75,6 +76,7 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",  
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'drf_spectacular',
 
@@ -100,6 +102,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "api.v1.middleware.ApiV1ErrorMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware", 
     'corsheaders.middleware.CorsMiddleware',  
     'django.middleware.common.CommonMiddleware', 
@@ -137,7 +140,7 @@ CORS_ALLOW_HEADERS = [
 
 # JWT Settings with Cookie support
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=5),  # Shorter for better security
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # 7 days
     'ROTATE_REFRESH_TOKENS': True,  # Enable token rotation for better security
     'BLACKLIST_AFTER_ROTATION': True,
@@ -165,12 +168,19 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'EXCEPTION_HANDLER': 'api.v1.exceptions.api_exception_handler',
 }
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'SU API',
     'DESCRIPTION': 'API for SU educational platform',
     'VERSION': '1.0.0',
+    'PREPROCESSING_HOOKS': [
+        'api.v1.schema.include_only_v1_endpoints',
+    ],
+    'ENUM_NAME_OVERRIDES': {
+        'RoleCodeEnum': 'accounts.models.RoleCode',
+    },
 }
 
 
@@ -202,12 +212,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": os.path.join(BASE_DIR, "db.sqlite3"),
-    }
-}
+DATABASES = {"default": build_database_config(BASE_DIR)}
 
 # https://docs.djangoproject.com/en/stable/ref/settings/#std:setting-DEFAULT_AUTO_FIELD
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -278,14 +283,14 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 # E-mail configuration
 
 EMAIL_BACKEND = config(
-    "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
+    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
 )
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = config("EMAIL_PORT", default=587)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
-EMAIL_HOST_USER = config("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
-EMAIL_FROM_ADDRESS = config("EMAIL_FROM_ADDRESS")
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_FROM_ADDRESS = config("EMAIL_FROM_ADDRESS", default="noreply@localhost")
 EMAIL_USE_SSL = False
 
 # crispy config

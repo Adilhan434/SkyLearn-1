@@ -37,13 +37,13 @@ class StudentFilter(django_filters.FilterSet):
         field_name="student__username", lookup_expr="exact", label=""
     )
     name = django_filters.CharFilter(
-        field_name="student__name", method="filter_by_name", label=""
+        method="filter_by_name", label=""
     )
     email = django_filters.CharFilter(
         field_name="student__email", lookup_expr="icontains", label=""
     )
     program = django_filters.CharFilter(
-        field_name="program__title", lookup_expr="icontains", label=""
+        field_name="group__program__name", lookup_expr="icontains", label=""
     )
 
     class Meta:
