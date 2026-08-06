@@ -57,7 +57,7 @@ class StudentScheduleItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScheduleItem
         fields = [
-            'id', 'course', 'course_title', 'course_code', 
+            'id', 'course', 'course_title',
             'group', 'group_name', 'lecturer_name', 'lesson_order',
             'day', 'date', 'start_time', 'end_time'
         ]
@@ -122,7 +122,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
     schedule_day = serializers.CharField(source='shcedule.day', read_only=True)
     schedule_date = serializers.DateField(source='shcedule.date', read_only=True)
     schedule_time = serializers.SerializerMethodField()
-    course_title = serializers.CharField(source='shcedule.course.title', read_only=True)
+    course_title = serializers.CharField(source='shcedule.course.name', read_only=True)
     
     class Meta:
         model = Attendance
@@ -142,14 +142,13 @@ class StudentAttendanceSerializer(serializers.ModelSerializer):
     schedule_day = serializers.CharField(source='shcedule.day', read_only=True)
     schedule_date = serializers.DateField(source='shcedule.date', read_only=True)
     schedule_time = serializers.SerializerMethodField()
-    course_title = serializers.CharField(source='shcedule.course.title', read_only=True)
-    course_code = serializers.CharField(source='shcedule.course.code', read_only=True)
+    course_title = serializers.CharField(source='shcedule.course.name', read_only=True)
     
     class Meta:
         model = Attendance
         fields = [
             'id', 'status', 'shcedule', 'schedule_day', 'schedule_date',
-            'schedule_time', 'course_title', 'course_code'
+            'schedule_time', 'course_title'
         ]
         read_only_fields = ['id', 'status', 'shcedule']
     
@@ -166,7 +165,7 @@ class LecturerAttendanceSerializer(serializers.ModelSerializer):
     schedule_day = serializers.CharField(source='shcedule.day', read_only=True)
     schedule_date = serializers.DateField(source='shcedule.date', read_only=True)
     schedule_time = serializers.SerializerMethodField()
-    course_title = serializers.CharField(source='shcedule.course.title', read_only=True)
+    course_title = serializers.CharField(source='shcedule.course.name', read_only=True)
     
     class Meta:
         model = Attendance
@@ -188,7 +187,7 @@ class AdminAttendanceSerializer(serializers.ModelSerializer):
     schedule_day = serializers.CharField(source='shcedule.day', read_only=True)
     schedule_date = serializers.DateField(source='shcedule.date', read_only=True)
     schedule_time = serializers.SerializerMethodField()
-    course_title = serializers.CharField(source='shcedule.course.title', read_only=True)
+    course_title = serializers.CharField(source='shcedule.course.name', read_only=True)
     
     class Meta:
         model = Attendance

@@ -24,7 +24,11 @@ class Grade1stModuleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['lecturer', 'student', 'course', 'grade']
-    search_fields = ['student__first_name', 'student__last_name', 'course__title', 'course__code']
+    search_fields = [
+        'student__student__first_name',
+        'student__student__last_name',
+        'course__name',
+    ]
     ordering_fields = ['student', 'course', 'total']
 
     def get_queryset(self):
@@ -46,7 +50,7 @@ class Grade1stModuleViewSet(viewsets.ModelViewSet):
         return StudentGrade1stModuleSerializer
 
     def get_permissions(self):
-        if hasattr(self.request.user, 'student') and self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
+        if hasattr(self.request.user, 'student_profile') and self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
             from rest_framework.permissions import IsAdminUser
             self.permission_classes = [IsAdminUser]
         return super().get_permissions()
@@ -63,7 +67,11 @@ class Grade2ndModuleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['lecturer', 'student', 'course', 'grade']
-    search_fields = ['student__first_name', 'student__last_name', 'course__title', 'course__code']
+    search_fields = [
+        'student__student__first_name',
+        'student__student__last_name',
+        'course__name',
+    ]
     ordering_fields = ['student', 'course', 'total']
 
     def get_queryset(self):
@@ -85,7 +93,7 @@ class Grade2ndModuleViewSet(viewsets.ModelViewSet):
         return StudentGrade2ndModuleSerializer
 
     def get_permissions(self):
-        if hasattr(self.request.user, 'student') and self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
+        if hasattr(self.request.user, 'student_profile') and self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
             from rest_framework.permissions import IsAdminUser
             self.permission_classes = [IsAdminUser]
         return super().get_permissions()
@@ -120,7 +128,7 @@ class GradeSemesterViewSet(viewsets.ModelViewSet):
         return StudentGradeSemesterSerializer
 
     def get_permissions(self):
-        if hasattr(self.request.user, 'student') and self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
+        if hasattr(self.request.user, 'student_profile') and self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
             from rest_framework.permissions import IsAdminUser
             self.permission_classes = [IsAdminUser]
         return super().get_permissions()
@@ -135,13 +143,13 @@ class GradeSemesterViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_grades(self, request):
         """Получить все оценки текущего студента"""
-        if not hasattr(request.user, 'student'):
+        if not hasattr(request.user, 'student_profile'):
             return Response(
                 {"detail": "Only students can view their grades"}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        grades = self.get_queryset().filter(student=request.user.student)
+        grades = self.get_queryset().filter(student=request.user.student_profile)
         serializer = self.get_serializer(grades, many=True)
         return Response(serializer.data)
 
@@ -253,25 +261,18 @@ class LecturerBulkGradesViewSet(viewsets.GenericViewSet):
                 for grade_data in grades_data:
                     student_id = grade_data['student_id']
                     
-                    print(f"🔄 Processing grade for student_id={student_id}")
-                    print(f"📋 Current lecturer: {request.user} (ID: {request.user.id}, is_lecturer: {request.user.is_lecturer})")
-                    
                     # Проверяем существование студента
                     from accounts.models import Student
                     try:
                         student = Student.objects.get(id=student_id)
-                        print(f"✅ Found student: {student_id} - {student.get_full_name()}")
                     except Student.DoesNotExist:
-                        print(f"❌ Student {student_id} not found!")
                         raise ValueError(f"Student with id {student_id} does not exist")
                     
                     # Проверяем существование курса
                     from core.models import Course
                     try:
                         course = Course.objects.get(id=course_id)
-                        print(f"✅ Found course: {course_id} - {course.name}")
                     except Course.DoesNotExist:
-                        print(f"❌ Course {course_id} not found!")
                         raise ValueError(f"Course with id {course_id} does not exist")
                     
                     # Базовые параметры для поиска/создания
@@ -284,11 +285,9 @@ class LecturerBulkGradesViewSet(viewsets.GenericViewSet):
                     # Для Grade_semester добавляем текущий семестр
                     if grade_type == 'semester':
                         from core.models import Semester
-                        current_semester = Semester.objects.filter(is_current_semester=True).first()
+                        current_semester = Semester.objects.filter(is_current=True).first()
                         if current_semester:
                             lookup_params['semester'] = current_semester
-                    
-                    print(f"🔍 Looking up grade with params: lecturer={request.user.username}, course={course_id}, student={student_id}")
                     
                     # Получаем или создаем объект оценки
                     try:
@@ -303,14 +302,7 @@ class LecturerBulkGradesViewSet(viewsets.GenericViewSet):
                             }
                         )
                     except Exception as e:
-                        print(f"❌ Error creating grade: {type(e).__name__}: {str(e)}")
-                        print(f"   Lookup params: {lookup_params}")
                         raise
-                    
-                    if created:
-                        print(f"➕ Created new grade for student {student_id}")
-                    else:
-                        print(f"📝 Found existing grade for student {student_id}")
                     
                     # Обновляем поля
                     update_fields = []

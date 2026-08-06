@@ -83,22 +83,22 @@ class ScheduleItem(models.Model):
         verbose_name_plural = "Schedule Items"
 
     def __str__(self):
-        return f"{self.course.title} - {self.group.name} - {self.day} ({self.lesson_time})"
+        return f"{self.course.name} - {self.group.name} - {self.day} ({self.lesson_time})"
 
     @property
     def start_time(self):
         """Время начала урока из LessonTime"""
-        return self.lesson_time.start_time if self.lesson_time else self.start
+        return self.lesson_time.start_time if self.lesson_time else None
 
     @property
     def end_time(self):
         """Время окончания урока из LessonTime"""
-        return self.lesson_time.end_time if self.lesson_time else self.end
+        return self.lesson_time.end_time if self.lesson_time else None
 
     @property
     def lesson_order(self):
         """Номер урока"""
-        return self.lesson_time.order if self.lesson_time else self.order
+        return self.lesson_time.order if self.lesson_time else None
 
 
 class Attendance(models.Model):
