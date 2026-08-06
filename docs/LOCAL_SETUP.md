@@ -225,3 +225,37 @@ EMAIL_BACKEND="django.core.mail.backends.console.EmailBackend"
 ```
 
 Письма будут отображаться в терминале.
+
+## 14. Опциональный запуск через Docker
+
+Основным способом разработки остаётся локальный Python 3.12 и PostgreSQL.
+Docker Compose предоставляет дополнительное изолированное окружение с
+сервисами `backend` и `postgres`.
+
+Запуск:
+
+```powershell
+docker compose up --build
+```
+
+Backend будет доступен по адресу `http://localhost:8000`, frontend origin —
+`http://localhost:5173`, PostgreSQL публикуется на host-порту `5433`, чтобы не
+конфликтовать с локальным PostgreSQL на стандартном порту `5432`.
+
+Проверка:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/api/v1/health/
+docker compose ps
+```
+
+Остановка без удаления данных PostgreSQL:
+
+```powershell
+docker compose down
+```
+
+Локальный `.env` не копируется в Docker image. Для изменения Docker-настроек
+используйте environment variables `POSTGRES_DB`, `POSTGRES_USER`,
+`POSTGRES_PASSWORD`, `POSTGRES_PORT` и `BACKEND_PORT`. Значения по умолчанию
+предназначены только для локальной разработки.
