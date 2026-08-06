@@ -1,9 +1,29 @@
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from decouple import config
 
 
 def build_database_config(base_dir, get_value=config):
+    database_url = get_value("DATABASE_URL", default="").strip()
+    if database_url:
+        parsed = urlparse(database_url)
+        if parsed.scheme not in {"postgres", "postgresql"}:
+            raise ValueError(
+                "Unsupported DATABASE_URL scheme. Use 'postgresql'."
+            )
+        if not parsed.path.lstrip("/"):
+            raise ValueError("DATABASE_URL must include a database name.")
+
+        return {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": unquote(parsed.path.lstrip("/")),
+            "USER": unquote(parsed.username or ""),
+            "PASSWORD": unquote(parsed.password or ""),
+            "HOST": parsed.hostname or "localhost",
+            "PORT": str(parsed.port or 5432),
+        }
+
     engine = get_value("DB_ENGINE", default="sqlite").strip().lower()
 
     if engine == "sqlite":
