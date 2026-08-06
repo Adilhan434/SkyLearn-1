@@ -1,0 +1,1 @@
+"""Enrollment database migrations."""

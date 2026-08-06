@@ -93,6 +93,12 @@ PROJECT_APPS = [
     "result.apps.ResultConfig",
     "attendance.apps.AttendanceConfig",
     "finance.apps.FinanceConfig",
+    "organization.apps.OrganizationConfig",
+    "courses.apps.CoursesConfig",
+    "enrollments.apps.EnrollmentsConfig",
+    "learning.apps.LearningConfig",
+    "progress.apps.ProgressConfig",
+    "audit.apps.AuditConfig",
 ]
 
 # Combine all apps
