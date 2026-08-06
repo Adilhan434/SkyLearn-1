@@ -1,10 +1,8 @@
 from django.contrib import admin
 
+from audit.admin import AuditAdminMixin
+
 from .models import Department, Faculty, Group, Program, Semester
-
-
-class AuditAdminMixin:
-    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(Faculty)

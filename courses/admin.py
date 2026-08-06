@@ -1,10 +1,12 @@
 from django.contrib import admin
 
+from audit.admin import AuditAdminMixin
+
 from .models import Course, CourseStatus
 
 
 @admin.register(Course)
-class CourseAdmin(admin.ModelAdmin):
+class CourseAdmin(AuditAdminMixin, admin.ModelAdmin):
     list_display = (
         "code",
         "title",
@@ -17,8 +19,6 @@ class CourseAdmin(admin.ModelAdmin):
     list_filter = ("status", "language", "semester", "faculty")
     search_fields = ("code", "title")
     list_select_related = ("semester", "faculty", "department", "program")
-    readonly_fields = ("created_at", "updated_at")
-
     @admin.display(boolean=True, description="Archived")
     def is_archived(self, obj):
         return obj.status == CourseStatus.ARCHIVED
