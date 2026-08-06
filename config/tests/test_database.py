@@ -47,11 +47,20 @@ class DatabaseConfigTests(SimpleTestCase):
                 ),
             )
 
-    def test_sqlite_is_the_local_default(self):
+    def test_postgresql_is_the_development_default(self):
+        database = build_database_config(
+            "/project",
+            get_value=values_from({}),
+        )
+
+        self.assertEqual(database["ENGINE"], "django.db.backends.postgresql")
+        self.assertEqual(database["NAME"], "su_lms")
+
+    def test_sqlite_is_available_only_when_explicitly_selected(self):
         directory = Path("C:/project")
         database = build_database_config(
             directory,
-            get_value=values_from({}),
+            get_value=values_from({"DB_ENGINE": "sqlite"}),
         )
 
         self.assertEqual(database["ENGINE"], "django.db.backends.sqlite3")

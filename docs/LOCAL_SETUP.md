@@ -6,7 +6,7 @@
 - pip;
 - Git;
 - PostgreSQL 14+;
-- SQLite — для локального запуска.
+- SQLite — только для отдельных изолированных тестов.
 
 ## 2. Клонирование и виртуальное окружение
 
@@ -32,26 +32,22 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Минимальная конфигурация для SQLite:
+Минимальная dev-конфигурация:
 
 ```dotenv
 DJANGO_DEBUG=True
 SECRET_KEY="django-insecure-local-development-only"
-DB_ENGINE=sqlite
+DATABASE_URL=postgresql://postgres:replace-with-local-password@localhost:5432/su_lms
 EMAIL_BACKEND="django.core.mail.backends.console.EmailBackend"
 ```
 
 При console email backend письма выводятся в терминал, поэтому доступ к
 настоящей почте для локального запуска не нужен.
 
-## 5. SQLite
+## 5. PostgreSQL
 
-SQLite используется по умолчанию:
-
-```dotenv
-DB_ENGINE=sqlite
-```
-## 6. PostgreSQL
+PostgreSQL используется как основная dev-база. `DATABASE_URL` имеет
+приоритет над отдельными `DB_*` variables.
 
 ### Создание пользователя и базы
 
@@ -62,18 +58,15 @@ CREATE USER su_lms_user WITH PASSWORD 'replace-with-local-password';
 CREATE DATABASE su_lms OWNER su_lms_user;
 ```
 
-в `.env`:
+В `.env`:
 
 ```dotenv
-DB_ENGINE=postgresql
-DB_NAME=su_lms
-DB_USER=su_lms_user
-DB_PASSWORD="replace-with-local-password"
-DB_HOST=localhost
-DB_PORT=5432
+DATABASE_URL=postgresql://su_lms_user:replace-with-local-password@localhost:5432/su_lms
 ```
 
-Для перехода на SQLite изменить:
+## 6. SQLite для изолированных тестов
+
+Чтобы явно выбрать SQLite, удалите `DATABASE_URL` из environment и укажите:
 
 ```dotenv
 DB_ENGINE=sqlite

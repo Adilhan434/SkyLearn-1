@@ -24,7 +24,7 @@ def build_database_config(base_dir, get_value=config):
             "PORT": str(parsed.port or 5432),
         }
 
-    engine = get_value("DB_ENGINE", default="sqlite").strip().lower()
+    engine = get_value("DB_ENGINE", default="postgresql").strip().lower()
 
     if engine == "sqlite":
         return {
