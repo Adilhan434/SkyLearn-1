@@ -13,11 +13,54 @@ def values_from(mapping):
 
 
 class DatabaseConfigTests(SimpleTestCase):
-    def test_sqlite_is_the_local_default(self):
+    def test_database_url_configures_postgresql(self):
+        database = build_database_config(
+            "/project",
+            get_value=values_from(
+                {
+                    "DATABASE_URL": (
+                        "postgresql://test_user:test%20password@database:5433/test_lms"
+                    ),
+                    "DB_ENGINE": "sqlite",
+                }
+            ),
+        )
+
+        self.assertEqual(
+            database,
+            {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": "test_lms",
+                "USER": "test_user",
+                "PASSWORD": "test password",
+                "HOST": "database",
+                "PORT": "5433",
+            },
+        )
+
+    def test_invalid_database_url_scheme_fails_clearly(self):
+        with self.assertRaisesMessage(ValueError, "DATABASE_URL scheme"):
+            build_database_config(
+                "/project",
+                get_value=values_from(
+                    {"DATABASE_URL": "mysql://user:password@database/app"}
+                ),
+            )
+
+    def test_postgresql_is_the_development_default(self):
+        database = build_database_config(
+            "/project",
+            get_value=values_from({}),
+        )
+
+        self.assertEqual(database["ENGINE"], "django.db.backends.postgresql")
+        self.assertEqual(database["NAME"], "su_lms")
+
+    def test_sqlite_is_available_only_when_explicitly_selected(self):
         directory = Path("C:/project")
         database = build_database_config(
             directory,
-            get_value=values_from({}),
+            get_value=values_from({"DB_ENGINE": "sqlite"}),
         )
 
         self.assertEqual(database["ENGINE"], "django.db.backends.sqlite3")

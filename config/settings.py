@@ -27,7 +27,7 @@ def fixed_base_context_copy(self):
 
 django.template.context.BaseContext.__copy__ = fixed_base_context_copy
 
-from decouple import config
+from decouple import Csv, config
 from django.utils.translation import gettext_lazy as _
 from config.database import build_database_config
 
@@ -45,7 +45,11 @@ SECRET_KEY = config("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DJANGO_DEBUG", default=True, cast=bool)
 
-ALLOWED_HOSTS = ["127.0.0.1", "adilmohak1.pythonanywhere.com", "localhost"]
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS",
+    default="localhost,127.0.0.1",
+    cast=Csv(),
+)
 
 # change the default user models to our custom model
 AUTH_USER_MODEL = "accounts.User"
@@ -89,6 +93,12 @@ PROJECT_APPS = [
     "result.apps.ResultConfig",
     "attendance.apps.AttendanceConfig",
     "finance.apps.FinanceConfig",
+    "organization.apps.OrganizationConfig",
+    "courses.apps.CoursesConfig",
+    "enrollments.apps.EnrollmentsConfig",
+    "learning.apps.LearningConfig",
+    "progress.apps.ProgressConfig",
+    "audit.apps.AuditConfig",
 ]
 
 # Combine all apps
@@ -96,6 +106,8 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -103,9 +115,6 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "api.v1.middleware.ApiV1ErrorMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware", 
-    'corsheaders.middleware.CorsMiddleware',  
-    'django.middleware.common.CommonMiddleware', 
 ]
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
@@ -117,15 +126,30 @@ if DEBUG:
 
 from datetime import timedelta
 
-# CORS Settings - Important for cookie-based auth
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in development
-if not DEBUG:
-    CORS_ALLOWED_ORIGINS = [
-        "https://yourdomain.com",  # Add your production frontend URL
-        "https://www.yourdomain.com",
-    ]
-
-CORS_ALLOW_CREDENTIALS = True  # Required for cookies
+# CORS/CSRF settings for cookie-based frontend authentication. Origins are
+# always explicit because wildcard origins are unsafe with credentials.
+CORS_ALLOWED_ORIGINS = config(
+    "CORS_ALLOWED_ORIGINS",
+    default="http://localhost:5173",
+    cast=Csv(),
+)
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="http://localhost:5173",
+    cast=Csv(),
+)
+CORS_ALLOW_CREDENTIALS = config(
+    "CORS_ALLOW_CREDENTIALS", default=True, cast=bool
+)
+SECURE_SSL_REDIRECT = config(
+    "SECURE_SSL_REDIRECT", default=False, cast=bool
+)
+SESSION_COOKIE_SECURE = config(
+    "SESSION_COOKIE_SECURE", default=not DEBUG, cast=bool
+)
+CSRF_COOKIE_SECURE = config(
+    "CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool
+)
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',

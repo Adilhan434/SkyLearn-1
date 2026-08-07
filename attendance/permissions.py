@@ -9,7 +9,7 @@ class IsStudent(permissions.BasePermission):
         return bool(
             request.user and 
             request.user.is_authenticated and 
-            hasattr(request.user, 'student')
+            hasattr(request.user, 'student_profile')
         )
 
 
@@ -47,7 +47,7 @@ class IsOwnerOrAdminOrLecturer(permissions.BasePermission):
             return True
         
         # Студенты могут просматривать только свою посещаемость
-        if hasattr(obj, 'Student') and hasattr(request.user, 'student'):
-            return obj.Student == request.user.student
+        if hasattr(obj, 'Student') and hasattr(request.user, 'student_profile'):
+            return obj.Student == request.user.student_profile
         
         return False

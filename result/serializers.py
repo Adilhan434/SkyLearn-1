@@ -38,7 +38,7 @@ class StudentGrade2ndModuleSerializer(StudentGradeSerializer):
 class StudentGradeSemesterSerializer(StudentGradeSerializer):
     course_title = serializers.CharField(source='course.name', read_only=True)
     lecturer_name = serializers.CharField(source='lecturer.get_full_name', read_only=True)
-    semester_name = serializers.CharField(source='semester.semester', read_only=True)
+    semester_name = serializers.CharField(source='semester.name', read_only=True)
 
     class Meta(StudentGradeSerializer.Meta):
         model = Grade_semester
@@ -90,7 +90,7 @@ class LecturerGrade2ndModuleSerializer(StudentGradeSerializer):
 class LecturerGradeSemesterSerializer(StudentGradeSerializer):
     course_title = serializers.CharField(source='course.name', read_only=True)
     lecturer_name = serializers.CharField(source='lecturer.get_full_name', read_only=True)
-    semester_name = serializers.CharField(source='semester.semester', read_only=True)
+    semester_name = serializers.CharField(source='semester.name', read_only=True)
 
     class Meta(StudentGradeSerializer.Meta):
         model = Grade_semester

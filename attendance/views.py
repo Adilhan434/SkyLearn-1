@@ -72,8 +72,8 @@ class ScheduleItemViewSet(viewsets.ModelViewSet):
         user = self.request.user
         
         # Студенты видят только расписание своей группы
-        if hasattr(user, 'student'):
-            student = user.student
+        if hasattr(user, 'student_profile'):
+            student = user.student_profile
             if student.group:
                 queryset = queryset.filter(group=student.group)
             else:
@@ -108,7 +108,7 @@ class ScheduleItemViewSet(viewsets.ModelViewSet):
             return AdminScheduleItemSerializer
         elif user.is_lecturer:
             return LecturerScheduleItemSerializer
-        elif hasattr(user, 'student'):
+        elif hasattr(user, 'student_profile'):
             return StudentScheduleItemSerializer
         
         return ScheduleItemSerializer
@@ -186,8 +186,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         user = self.request.user
         
         # Студенты видят только свою посещаемость
-        if hasattr(user, 'student'):
-            queryset = queryset.filter(Student=user.student)
+        if hasattr(user, 'student_profile'):
+            queryset = queryset.filter(Student=user.student_profile)
         
         # Преподаватели видят посещаемость на своих занятиях
         elif user.is_lecturer:
@@ -220,7 +220,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             return AdminAttendanceSerializer
         elif user.is_lecturer:
             return LecturerAttendanceSerializer
-        elif hasattr(user, 'student'):
+        elif hasattr(user, 'student_profile'):
             return StudentAttendanceSerializer
         
         return AttendanceSerializer
@@ -277,8 +277,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_attendance(self, request):
         """Получить посещаемость текущего студента"""
-        if hasattr(request.user, 'student'):
-            queryset = self.get_queryset().filter(Student=request.user.student)
+        if hasattr(request.user, 'student_profile'):
+            queryset = self.get_queryset().filter(Student=request.user.student_profile)
             serializer = self.get_serializer(queryset, many=True)
             return Response(serializer.data)
         return Response(
