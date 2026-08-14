@@ -11,7 +11,6 @@ from courses.models import (
     Course,
     CourseLanguage,
     CourseStatus,
-    CourseTeachingAssignment,
 )
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
@@ -72,7 +71,14 @@ class CourseModelTests(TestCase):
     def test_course_code_is_unique(self):
         self.make_course()
         with self.assertRaises(IntegrityError):
-            self.make_course(title="Duplicate course")
+            self.make_course(title="Duplicate course", code="cs101")
+
+    def test_course_code_is_trimmed_and_normalized(self):
+        course = self.make_course(code="  cs-101  ")
+
+        self.assertEqual(course.code, "CS-101")
+        course.refresh_from_db()
+        self.assertEqual(course.code, "CS-101")
 
     def test_course_dates_must_be_ordered(self):
         course = Course(

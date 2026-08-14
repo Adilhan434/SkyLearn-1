@@ -270,6 +270,141 @@ class CourseAPITests(APITestCase):
         self.assertEqual(created.created_by, self.staff)
         self.assertEqual(created.updated_by, self.staff)
 
+    def test_create_normalizes_course_code(self):
+        self.client.force_authenticate(self.staff)
+
+        response = self.client.post(
+            self.list_url,
+            self.valid_payload(code="  cs-201  "),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Course.objects.filter(code="CS-201").exists())
+
+    def test_create_rejects_case_insensitive_duplicate_code(self):
+        self.client.force_authenticate(self.staff)
+
+        response = self.client.post(
+            self.list_url,
+            self.valid_payload(code=self.course.code.lower()),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("code", response.data["error"]["fields"])
+
+    def test_create_requires_non_blank_title_and_code(self):
+        self.client.force_authenticate(self.staff)
+        missing_payload = self.valid_payload()
+        missing_payload.pop("title")
+        missing_payload.pop("code")
+
+        missing_response = self.client.post(
+            self.list_url,
+            missing_payload,
+        )
+        blank_response = self.client.post(
+            self.list_url,
+            self.valid_payload(title="   ", code="   "),
+        )
+
+        self.assertEqual(missing_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(blank_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("title", missing_response.data["error"]["fields"])
+        self.assertIn("code", missing_response.data["error"]["fields"])
+        self.assertIn("title", blank_response.data["error"]["fields"])
+        self.assertIn("code", blank_response.data["error"]["fields"])
+
+    def test_create_rejects_credits_outside_supported_range(self):
+        self.client.force_authenticate(self.staff)
+
+        zero_response = self.client.post(
+            self.list_url,
+            self.valid_payload(credits=0),
+        )
+        excessive_response = self.client.post(
+            self.list_url,
+            self.valid_payload(credits=61),
+        )
+
+        self.assertEqual(zero_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(excessive_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("credits", zero_response.data["error"]["fields"])
+        self.assertIn("credits", excessive_response.data["error"]["fields"])
+
+    def test_create_rejects_unknown_semester(self):
+        self.client.force_authenticate(self.staff)
+
+        response = self.client.post(
+            self.list_url,
+            self.valid_payload(semester=999999),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("semester", response.data["error"]["fields"])
+
+    def test_create_rejects_inactive_organization_objects(self):
+        self.faculty.is_active = False
+        self.faculty.save(update_fields=("is_active",))
+        self.department.is_active = False
+        self.department.save(update_fields=("is_active",))
+        self.program.is_active = False
+        self.program.save(update_fields=("is_active",))
+        self.client.force_authenticate(self.staff)
+
+        response = self.client.post(self.list_url, self.valid_payload())
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            set(response.data["error"]["fields"]),
+            {"faculty", "department", "program"},
+        )
+
+    def test_content_manager_can_assign_primary_teacher_on_create(self):
+        teacher = get_user_model().objects.create_user(username="selected-teacher")
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            self.list_url,
+            self.valid_payload(teacher=teacher.pk),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created = Course.objects.get(code="CS201")
+        assignment = created.teaching_assignments.get(user=teacher)
+        self.assertTrue(assignment.is_primary)
+        self.assertEqual(assignment.created_by, self.user)
+
+    def test_create_rejects_inactive_teacher(self):
+        teacher = get_user_model().objects.create_user(
+            username="inactive-selected-teacher",
+            is_active=False,
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            self.list_url,
+            self.valid_payload(teacher=teacher.pk),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("teacher", response.data["error"]["fields"])
+
+    def test_create_rejects_user_without_teacher_role(self):
+        non_teacher = get_user_model().objects.create_user(
+            username="selected-non-teacher"
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            self.list_url,
+            self.valid_payload(teacher=non_teacher.pk),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("teacher", response.data["error"]["fields"])
+
     def test_teacher_can_create_course_and_becomes_primary_teacher(self):
         teacher = get_user_model().objects.create_user(username="creating-teacher")
         teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
@@ -327,6 +462,48 @@ class CourseAPITests(APITestCase):
         self.course.refresh_from_db()
         self.assertEqual(self.course.title, "Updated Course")
         self.assertEqual(self.course.updated_by, self.user)
+
+    def test_patch_validates_dates_against_existing_values(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {"start_date": "2027-01-01"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("end_date", response.data["error"]["fields"])
+
+    def test_patch_replaces_primary_teacher(self):
+        first_teacher = get_user_model().objects.create_user(
+            username="first-primary-teacher"
+        )
+        second_teacher = get_user_model().objects.create_user(
+            username="second-primary-teacher"
+        )
+        teacher_role = Role.objects.get(code=RoleCode.TEACHER)
+        first_teacher.roles.add(teacher_role)
+        second_teacher.roles.add(teacher_role)
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=first_teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {"teacher": second_teacher.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        first_assignment = self.course.teaching_assignments.get(user=first_teacher)
+        second_assignment = self.course.teaching_assignments.get(user=second_teacher)
+        self.assertFalse(first_assignment.is_primary)
+        self.assertTrue(second_assignment.is_primary)
 
     def test_teacher_can_patch_assigned_draft_course(self):
         teacher = get_user_model().objects.create_user(username="editing-teacher")

@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
+from django.db.models.functions import Lower
 
 from accounts.models import RoleCode
 from audit.models import AuditModel
@@ -26,7 +27,7 @@ class Course(AuditModel):
     """Release 1 course metadata, independent from the legacy core course."""
 
     title = models.CharField(max_length=255)
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(max_length=50)
     description = models.TextField(blank=True)
     language = models.CharField(
         max_length=10,
@@ -73,6 +74,12 @@ class Course(AuditModel):
             models.Index(fields=("semester", "status"), name="course_sem_status_idx"),
             models.Index(fields=("faculty", "status"), name="course_fac_status_idx"),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("code"),
+                name="course_unique_code_ci",
+            ),
+        ]
         verbose_name = "Course"
         verbose_name_plural = "Courses"
 
@@ -89,6 +96,7 @@ class Course(AuditModel):
             raise ValidationError(errors)
 
     def save(self, *args, allow_archived_update=False, **kwargs):
+        self.code = self.code.strip().upper()
         if self.pk and not allow_archived_update:
             previous_status = (
                 type(self).objects.filter(pk=self.pk)

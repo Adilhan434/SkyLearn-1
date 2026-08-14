@@ -126,6 +126,12 @@ class CourseDetailSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
 
 
 class CourseWriteSerializer(serializers.ModelSerializer):
+    teacher = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        required=False,
+        write_only=True,
+    )
+
     class Meta:
         model = Course
         fields = (
@@ -136,6 +142,7 @@ class CourseWriteSerializer(serializers.ModelSerializer):
             "language",
             "credits",
             "semester",
+            "teacher",
             "faculty",
             "department",
             "program",
@@ -158,6 +165,26 @@ class CourseWriteSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
+    def validate_code(self, value):
+        normalized_code = value.strip().upper()
+        courses = Course.objects.filter(code__iexact=normalized_code)
+        if self.instance is not None:
+            courses = courses.exclude(pk=self.instance.pk)
+        if courses.exists():
+            raise serializers.ValidationError(
+                "A course with this code already exists."
+            )
+        return normalized_code
+
+    def validate_teacher(self, teacher):
+        if not teacher.is_active:
+            raise serializers.ValidationError("Teacher must be active.")
+        if not teacher.roles.filter(code=RoleCode.TEACHER).exists():
+            raise serializers.ValidationError(
+                "Selected user must have the teacher role."
+            )
+        return teacher
+
     def validate(self, attrs):
         instance = self.instance
         start_date = attrs.get(
@@ -176,6 +203,13 @@ class CourseWriteSerializer(serializers.ModelSerializer):
         program = attrs.get("program", getattr(instance, "program", None))
         errors = {}
 
+        for field_name, organization_object in (
+            ("faculty", faculty),
+            ("department", department),
+            ("program", program),
+        ):
+            if organization_object and not organization_object.is_active:
+                errors[field_name] = "Selected object must be active."
         if start_date and end_date and end_date < start_date:
             errors["end_date"] = "End date must be on or after start date."
         if faculty and department and department.faculty_id != faculty.id:
@@ -193,25 +227,54 @@ class CourseWriteSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         user = self.context["request"].user
+        teacher = validated_data.pop("teacher", None)
         course = Course.objects.create(
             created_by=user,
             updated_by=user,
             **validated_data,
         )
-        if user.roles.filter(code=RoleCode.TEACHER).exists():
-            CourseTeachingAssignment.objects.create(
-                course=course,
-                user=user,
-                role=CourseTeachingRole.TEACHER,
-                is_primary=True,
-                created_by=user,
-                updated_by=user,
-            )
+        if teacher is None and user.roles.filter(code=RoleCode.TEACHER).exists():
+            teacher = user
+        if teacher is not None:
+            self._set_primary_teacher(course, teacher, user)
         return course
 
+    @transaction.atomic
     def update(self, instance, validated_data):
-        instance.updated_by = self.context["request"].user
+        user = self.context["request"].user
+        teacher = validated_data.pop("teacher", None)
+        instance.updated_by = user
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.save()
+        if teacher is not None:
+            self._set_primary_teacher(instance, teacher, user)
         return instance
+
+    @staticmethod
+    def _set_primary_teacher(course, teacher, actor):
+        CourseTeachingAssignment.objects.filter(
+            course=course,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        ).exclude(user=teacher).update(
+            is_primary=False,
+            updated_by=actor,
+        )
+        assignment, created = CourseTeachingAssignment.objects.get_or_create(
+            course=course,
+            user=teacher,
+            defaults={
+                "role": CourseTeachingRole.TEACHER,
+                "is_primary": True,
+                "created_by": actor,
+                "updated_by": actor,
+            },
+        )
+        if not created:
+            assignment.role = CourseTeachingRole.TEACHER
+            assignment.is_primary = True
+            assignment.updated_by = actor
+            assignment.save(
+                update_fields=("role", "is_primary", "updated_by", "updated_at")
+            )
