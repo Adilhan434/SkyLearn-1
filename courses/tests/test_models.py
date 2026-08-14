@@ -7,7 +7,12 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from courses.admin import CourseAdmin
-from courses.models import Course, CourseLanguage, CourseStatus
+from courses.models import (
+    Course,
+    CourseLanguage,
+    CourseStatus,
+    CourseTeachingAssignment,
+)
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
@@ -129,6 +134,9 @@ class CourseModelTests(TestCase):
     def test_course_is_registered_in_admin(self):
         self.assertIsInstance(admin.site._registry[Course], CourseAdmin)
 
-    def test_teacher_content_models_are_not_added_to_courses_app(self):
+    def test_course_domain_contains_teaching_assignment(self):
         app_models = {model.__name__ for model in Course._meta.app_config.get_models()}
-        self.assertEqual(app_models, {"Course"})
+        self.assertEqual(
+            app_models,
+            {"Course", "CourseTeachingAssignment"},
+        )

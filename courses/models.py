@@ -1,7 +1,10 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
 
+from accounts.models import RoleCode
 from audit.models import AuditModel
 from organization.models import Department, Faculty, Program, Semester
 
@@ -105,6 +108,84 @@ class Course(AuditModel):
     def __str__(self):
         return f"{self.code} - {self.title}"
 
-    # Teacher and Course Assistant assignments intentionally remain outside
-    # this foundation model. They can be added later as explicit through
-    # models without changing the course metadata contract.
+
+class CourseTeachingRole(models.TextChoices):
+    TEACHER = "teacher", "Teacher"
+    TEACHING_ASSISTANT = "teaching_assistant", "Teaching assistant"
+
+
+class CourseTeachingAssignment(AuditModel):
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="teaching_assignments",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="course_teaching_assignments",
+    )
+    role = models.CharField(
+        max_length=30,
+        choices=CourseTeachingRole.choices,
+    )
+    is_primary = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("course", "role", "user")
+        indexes = [
+            models.Index(
+                fields=("course", "role"),
+                name="course_assign_course_role_idx",
+            ),
+            models.Index(
+                fields=("user", "role"),
+                name="course_assign_user_role_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("course", "user"),
+                name="course_unique_teaching_user",
+            ),
+            models.UniqueConstraint(
+                fields=("course",),
+                condition=Q(
+                    role=CourseTeachingRole.TEACHER,
+                    is_primary=True,
+                ),
+                name="course_unique_primary_teacher",
+            ),
+            models.CheckConstraint(
+                check=Q(role=CourseTeachingRole.TEACHER)
+                | Q(is_primary=False),
+                name="course_primary_teacher_only",
+            ),
+        ]
+        verbose_name = "Course teaching assignment"
+        verbose_name_plural = "Course teaching assignments"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.user_id:
+            if not self.user.is_active:
+                errors["user"] = "Only an active user can be assigned."
+            expected_role = (
+                RoleCode.TEACHER
+                if self.role == CourseTeachingRole.TEACHER
+                else RoleCode.TEACHING_ASSISTANT
+            )
+            if not self.user.roles.filter(code=expected_role).exists():
+                errors["user"] = (
+                    f"User must have the {expected_role} role."
+                )
+        if self.is_primary and self.role != CourseTeachingRole.TEACHER:
+            errors["is_primary"] = (
+                "Only a teacher assignment can be primary."
+            )
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f"{self.course.code} - {self.user} ({self.role})"
