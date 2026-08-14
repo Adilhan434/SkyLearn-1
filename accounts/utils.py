@@ -1,12 +1,27 @@
 import threading
 from datetime import datetime
+import secrets
+import string
+
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from core.utils import send_html_email
 
 
 def generate_password():
-    return get_user_model().objects.make_random_password()
+    """Generate a strong password without deprecated Django manager helpers."""
+
+    symbols = "!@#$%^&*"
+    alphabet = string.ascii_letters + string.digits + symbols
+    characters = [
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.digits),
+        secrets.choice(symbols),
+    ]
+    characters.extend(secrets.choice(alphabet) for _index in range(12))
+    secrets.SystemRandom().shuffle(characters)
+    return "".join(characters)
 
 
 def generate_student_id():

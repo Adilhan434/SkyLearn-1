@@ -12,21 +12,6 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 
 import os
 
-# Fix for Python 3.14+ compatibility with Django 4.2 templates
-# AttributeError: 'super' object has no attribute 'dicts'
-import django.template.context
-
-def fixed_base_context_copy(self):
-    cls = self.__class__
-    duplicate = cls.__new__(cls)
-    for key, value in self.__dict__.items():
-        if key not in ('dicts', 'render_context'):
-            setattr(duplicate, key, value)
-    duplicate.dicts = self.dicts[:]
-    return duplicate
-
-django.template.context.BaseContext.__copy__ = fixed_base_context_copy
-
 from decouple import Csv, config
 from django.utils.translation import gettext_lazy as _
 from config.database import build_database_config
@@ -156,6 +141,11 @@ SESSION_COOKIE_SECURE = config(
 CSRF_COOKIE_SECURE = config(
     "CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool
 )
+SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
+    "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False, cast=bool
+)
+SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=False, cast=bool)
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',

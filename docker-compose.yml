@@ -25,13 +25,19 @@ services:
       - -c
       - python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000
     environment:
-      SECRET_KEY: ${SECRET_KEY:-docker-local-only-change-me}
+      SECRET_KEY: ${SECRET_KEY:-docker-local-only-change-me-use-50-random-characters}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-su_lms}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:5173}
       CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-True}
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-False}
+      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-False}
+      SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS:-0}
+      SECURE_HSTS_INCLUDE_SUBDOMAINS: ${SECURE_HSTS_INCLUDE_SUBDOMAINS:-False}
+      SECURE_HSTS_PRELOAD: ${SECURE_HSTS_PRELOAD:-False}
       EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
       USE_S3: ${USE_S3:-False}
       SCORM_MAX_FILES: ${SCORM_MAX_FILES:-5000}
