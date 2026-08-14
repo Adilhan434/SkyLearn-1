@@ -20,6 +20,7 @@ class ApiV1RoutingTests(APITestCase):
                     "roles": "/api/v1/roles/",
                     "organization": "/api/v1/organization/",
                     "courses": "/api/v1/courses/",
+                    "course_templates": "/api/v1/course-templates/",
                     "health": "/api/v1/health/",
                 },
             },
@@ -37,6 +38,7 @@ class ApiV1RoutingTests(APITestCase):
                 "roles/",
                 "organization/",
                 "courses/",
+                "course-templates/",
                 "health/",
             }.issubset(mounted_prefixes)
         )

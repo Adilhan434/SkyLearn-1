@@ -14,4 +14,8 @@ urlpatterns = [
     path("organization/", include("core.api.v1.organization_urls")),
     path("", include("learning.api.v1.urls")),
     path("courses/", include("courses.api.v1.urls")),
+    path(
+        "course-templates/",
+        include("courses.api.v1.template_urls"),
+    ),
 ]

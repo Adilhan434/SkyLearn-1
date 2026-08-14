@@ -7,13 +7,14 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from accounts.models import Role, RoleCode
+from accounts.models import LMSPermission, LMSPermissionCode, Role, RoleCode
 from courses.copying import copy_course
 from courses.models import (
     Course,
     CourseStatus,
     CourseTeachingAssignment,
     CourseTeachingRole,
+    CourseTemplate,
 )
 from learning.models import (
     CourseModule,
@@ -112,6 +113,31 @@ class CourseAPITests(APITestCase):
             "api-v1:courses-v1:copy",
             kwargs={"pk": (course or self.course).pk},
         )
+
+    def template_list_url(self):
+        return reverse("api-v1:course-templates-v1:list-create")
+
+    def template_detail_url(self, template):
+        return reverse(
+            "api-v1:course-templates-v1:detail",
+            kwargs={"pk": template.pk},
+        )
+
+    def template_create_course_url(self, template):
+        return reverse(
+            "api-v1:course-templates-v1:create-course",
+            kwargs={"pk": template.pk},
+        )
+
+    def create_template(self, **overrides):
+        payload = {
+            "title": "Programming template",
+            "description": "Reusable structure",
+            "source_course": self.course.pk,
+        }
+        payload.update(overrides)
+        self.client.force_authenticate(self.user)
+        return self.client.post(self.template_list_url(), payload, format="json")
 
     def build_copy_structure(self):
         first_module = CourseModule.objects.create(
@@ -1050,6 +1076,169 @@ class CourseAPITests(APITestCase):
         self.assertEqual(Course.objects.count(), initial_course_count)
         self.assertFalse(Course.objects.filter(code="ROLLBACK-COPY").exists())
 
+    def test_content_manager_creates_source_independent_course_template(self):
+        self.build_copy_structure()
+
+        response = self.create_template()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertNotIn("snapshot", response.data)
+        self.assertNotIn("source_course", response.data)
+        template = CourseTemplate.objects.get(pk=response.data["id"])
+        self.assertEqual(template.created_by, self.user)
+        self.assertEqual(template.updated_by, self.user)
+        self.assertEqual(template.snapshot["version"], 1)
+        self.assertEqual(len(template.snapshot["modules"]), 2)
+        lesson_data = template.snapshot["modules"][0]["topics"][0]["lessons"]
+        self.assertEqual(
+            lesson_data[1]["required_lesson_ref"],
+            lesson_data[0]["ref"],
+        )
+        self.assertNotIn(
+            "source_course",
+            {field.name for field in CourseTemplate._meta.get_fields()},
+        )
+
+    def test_template_can_create_course_after_source_is_deleted(self):
+        template_response = self.create_template()
+        template = CourseTemplate.objects.get(pk=template_response.data["id"])
+        self.course.delete()
+
+        response = self.client.post(
+            self.template_create_course_url(template),
+            {"title": "Independent course", "code": "INDEPENDENT-1"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Course.objects.filter(code="INDEPENDENT-1").exists())
+
+    def test_active_templates_can_be_listed_and_retrieved(self):
+        active_response = self.create_template()
+        active = CourseTemplate.objects.get(pk=active_response.data["id"])
+        inactive_response = self.create_template(
+            title="Inactive template",
+            is_active=False,
+        )
+        inactive = CourseTemplate.objects.get(pk=inactive_response.data["id"])
+
+        list_response = self.client.get(self.template_list_url())
+        detail_response = self.client.get(self.template_detail_url(active))
+        inactive_detail_response = self.client.get(self.template_detail_url(inactive))
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in list_response.data], [active.pk])
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["title"], active.title)
+        self.assertEqual(
+            inactive_detail_response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_active_template_creates_full_draft_course(self):
+        self.build_copy_structure()
+        template_response = self.create_template()
+        template = CourseTemplate.objects.get(pk=template_response.data["id"])
+
+        response = self.client.post(
+            self.template_create_course_url(template),
+            {"title": "From Template", "code": "tmpl-101"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        course = Course.objects.get(pk=response.data["id"])
+        self.assertEqual(course.code, "TMPL-101")
+        self.assertEqual(course.status, CourseStatus.DRAFT)
+        self.assertEqual(course.created_by, self.user)
+        self.assertEqual(course.modules.count(), 2)
+        lessons = Lesson.objects.filter(topic__module__course=course).order_by("order")
+        first_lesson, second_lesson = lessons
+        self.assertFalse(first_lesson.is_published)
+        self.assertEqual(second_lesson.required_lesson, first_lesson)
+        self.assertEqual(first_lesson.materials.get().title, "Handbook")
+        self.assertFalse(course.teaching_assignments.exists())
+        self.assertFalse(course.scorm_packages.exists())
+
+    def test_template_endpoints_enforce_authentication_and_permissions(self):
+        anonymous_response = self.client.get(self.template_list_url())
+        teacher = get_user_model().objects.create_user(username="template-denied")
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(teacher)
+
+        forbidden_response = self.client.get(self.template_list_url())
+
+        self.assertEqual(
+            anonymous_response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+        self.assertEqual(
+            forbidden_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_inactive_template_cannot_create_course(self):
+        template_response = self.create_template(is_active=False)
+        template = CourseTemplate.objects.get(pk=template_response.data["id"])
+
+        response = self.client.post(
+            self.template_create_course_url(template),
+            {"title": "Inactive", "code": "INACTIVE-1"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(Course.objects.filter(code="INACTIVE-1").exists())
+
+    def test_create_course_from_template_also_requires_create_permission(self):
+        template_response = self.create_template()
+        template = CourseTemplate.objects.get(pk=template_response.data["id"])
+        content_manager = Role.objects.get(code=RoleCode.CONTENT_MANAGER)
+        content_manager.permissions.remove(
+            LMSPermission.objects.get(code=LMSPermissionCode.COURSES_CREATE)
+        )
+
+        response = self.client.post(
+            self.template_create_course_url(template),
+            {"title": "Forbidden", "code": "FORBIDDEN-1"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Course.objects.filter(code="FORBIDDEN-1").exists())
+
+    def test_invalid_template_snapshot_has_stable_error(self):
+        template_response = self.create_template()
+        template = CourseTemplate.objects.get(pk=template_response.data["id"])
+        template.snapshot = {"version": 999}
+        template.save(update_fields=("snapshot", "updated_at"))
+
+        response = self.client.post(
+            self.template_create_course_url(template),
+            {"title": "Invalid", "code": "INVALID-1"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"]["code"],
+            "invalid_course_template",
+        )
+        self.assertFalse(Course.objects.filter(code="INVALID-1").exists())
+
+    def test_template_rejects_duplicate_course_code_with_stable_error(self):
+        template_response = self.create_template()
+        template = CourseTemplate.objects.get(pk=template_response.data["id"])
+
+        response = self.client.post(
+            self.template_create_course_url(template),
+            {"title": "Duplicate", "code": self.course.code.lower()},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "course_code_exists")
+
     def test_routes_have_stable_names(self):
         self.assertEqual(
             reverse("api-v1:courses-v1:list-create"),
@@ -1063,3 +1252,4 @@ class CourseAPITests(APITestCase):
             self.copy_url(),
             f"{self.list_url}{self.course.pk}/copy/",
         )
+        self.assertEqual(self.template_list_url(), "/api/v1/course-templates/")

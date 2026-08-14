@@ -22,7 +22,7 @@ integration task requires it.
 | `accounts` | Custom user, JWT authentication, current-user endpoint, roles and base User API | Active |
 | `audit` | Shared abstract audit model and Django Admin audit mixin | Active |
 | `organization` | Faculties, departments, academic programs, student groups and semesters | Active models and Admin; API deferred |
-| `courses` | Release 1 course metadata and Course list/create/detail API | Active |
+| `courses` | Course metadata, lifecycle, copying, templates and management API | Active |
 | `enrollments` | Future enrollment ownership and lifecycle | Reserved; no models yet |
 | `learning` | Ordered course modules, topics, lessons and release conditions | Active models, Admin and structure management API |
 | `progress` | Future student progress and completion state | Reserved; no models yet |
@@ -201,6 +201,9 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/{id}/archive/` | Archive a Published course | Archive permission |
 | `POST /api/v1/courses/{id}/restore/` | Restore an Archived course | Archive permission |
 | `POST /api/v1/courses/{id}/copy/` | Copy course metadata and content into a new Draft | Copy permission and course access |
+| `GET, POST /api/v1/course-templates/` | List active templates or snapshot an accessible course | Copy permission |
+| `GET /api/v1/course-templates/{id}/` | Retrieve active template metadata | Copy permission |
+| `POST /api/v1/course-templates/{id}/create-course/` | Create a new Draft from an active template | Copy and create permissions |
 | `/api/v1/organization/` | Reserved Organization namespace | API deferred |
 
 Course list filtering supports `status`, `semester`, `faculty`, `department`,
@@ -285,6 +288,17 @@ progress and audit history are not copied. The operation requires
 `courses.copy` plus object access to the source course and rolls back completely
 if any nested object cannot be created.
 
+`CourseTemplate` stores a versioned JSON snapshot of the same course metadata
+and learning structure used by course copying. The snapshot contains portable
+lesson references, so prerequisite links are remapped when a course is
+created. A template has no foreign key to its source Course and remains usable
+after that source is deleted. Only active templates are exposed by the API.
+Creating a template requires `courses.copy` and access to the source; creating
+a new Draft from it additionally requires `courses.create`. Snapshot creation
+and restoration are atomic. Review/publication state, teaching assignments,
+SCORM packages, enrollments, progress and audit history are excluded. Stored
+file names are referenced and file bytes are not physically duplicated.
+
 ## 6. Database and runtime
 
 PostgreSQL is the primary development and staging database. `DATABASE_URL`
@@ -345,7 +359,7 @@ The following functionality is outside the current foundation:
 - assignments, quizzes and Gradebook;
 - student progress and calendar;
 - course publication workflow beyond the base status field;
-- course copying and templates;
+- course-template update and delete endpoints;
 - Teacher Portal and Student Progress APIs;
 - S3 or another remote file-storage integration;
 - complete field-level Audit Log.

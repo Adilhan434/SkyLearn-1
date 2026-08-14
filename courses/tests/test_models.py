@@ -6,11 +6,12 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
-from courses.admin import CourseAdmin
+from courses.admin import CourseAdmin, CourseTemplateAdmin
 from courses.models import (
     Course,
     CourseLanguage,
     CourseStatus,
+    CourseTemplate,
 )
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
@@ -140,9 +141,30 @@ class CourseModelTests(TestCase):
     def test_course_is_registered_in_admin(self):
         self.assertIsInstance(admin.site._registry[Course], CourseAdmin)
 
+    def test_course_template_model_and_admin(self):
+        template = CourseTemplate.objects.create(
+            title="Starter",
+            description="Reusable structure",
+            snapshot={"version": 1, "course": {}, "modules": []},
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        self.assertEqual(str(template), "Starter")
+        self.assertTrue(template.is_active)
+        self.assertIsInstance(
+            admin.site._registry[CourseTemplate],
+            CourseTemplateAdmin,
+        )
+
     def test_course_domain_contains_teaching_assignment(self):
         app_models = {model.__name__ for model in Course._meta.app_config.get_models()}
         self.assertEqual(
             app_models,
-            {"Course", "CourseTeachingAssignment", "CourseStatusHistory"},
+            {
+                "Course",
+                "CourseTeachingAssignment",
+                "CourseStatusHistory",
+                "CourseTemplate",
+            },
         )

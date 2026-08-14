@@ -4,7 +4,12 @@ from rest_framework import serializers
 
 from accounts.models import RoleCode, User
 from courses.copying import CourseCodeExists
-from courses.models import Course, CourseTeachingAssignment, CourseTeachingRole
+from courses.models import (
+    Course,
+    CourseTeachingAssignment,
+    CourseTeachingRole,
+    CourseTemplate,
+)
 from organization.models import Department, Faculty, Program, Semester
 
 
@@ -155,6 +160,37 @@ class CourseCopySerializer(serializers.Serializer):
         if Course.objects.filter(code__iexact=normalized_code).exists():
             raise CourseCodeExists()
         return normalized_code
+
+
+class CourseTemplateSerializer(serializers.ModelSerializer):
+    source_course = serializers.IntegerField(
+        write_only=True,
+        min_value=1,
+        required=True,
+    )
+    created_by = serializers.PrimaryKeyRelatedField(read_only=True)
+    updated_by = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = CourseTemplate
+        fields = (
+            "id",
+            "title",
+            "description",
+            "is_active",
+            "source_course",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
 
 
 class CourseWriteSerializer(serializers.ModelSerializer):

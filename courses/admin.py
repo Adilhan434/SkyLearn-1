@@ -6,6 +6,7 @@ from .models import (
     Course,
     CourseStatus,
     CourseStatusHistory,
+    CourseTemplate,
     CourseTeachingAssignment,
 )
 
@@ -31,6 +32,7 @@ class CourseAdmin(AuditAdminMixin, admin.ModelAdmin):
     list_filter = ("status", "language", "semester", "faculty")
     search_fields = ("code", "title")
     list_select_related = ("semester", "faculty", "department", "program")
+
     @admin.display(boolean=True, description="Archived")
     def is_archived(self, obj):
         return obj.status == CourseStatus.ARCHIVED
@@ -79,3 +81,11 @@ class CourseStatusHistoryAdmin(AuditAdminMixin, admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
+
+@admin.register(CourseTemplate)
+class CourseTemplateAdmin(AuditAdminMixin, admin.ModelAdmin):
+    list_display = ("title", "is_active", "created_by", "created_at")
+    list_filter = ("is_active",)
+    search_fields = ("title", "description")
+    readonly_fields = AuditAdminMixin.readonly_fields + ("snapshot",)

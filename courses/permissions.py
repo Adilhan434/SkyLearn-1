@@ -100,3 +100,24 @@ class CourseLifecyclePermission(BasePermission):
             request.user,
             Course.objects.filter(pk=obj.pk),
         ).exists()
+
+
+class CourseTemplatePermission(BasePermission):
+    """Require every LMS permission declared by a template endpoint."""
+
+    message = "Course template access is not allowed."
+
+    def has_permission(self, request, view):
+        user = request.user
+        required_permissions = getattr(
+            view,
+            "required_permissions",
+            (LMSPermissionCode.COURSES_COPY,),
+        )
+        return bool(
+            has_course_management_role(user)
+            and all(
+                user.has_lms_permission(permission)
+                for permission in required_permissions
+            )
+        )

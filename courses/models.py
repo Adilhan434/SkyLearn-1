@@ -127,6 +127,23 @@ class Course(AuditModel):
         return f"{self.code} - {self.title}"
 
 
+class CourseTemplate(AuditModel):
+    """Reusable, source-independent snapshot of a course structure."""
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    snapshot = models.JSONField(default=dict, editable=False)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        ordering = ("title", "id")
+        verbose_name = "Course template"
+        verbose_name_plural = "Course templates"
+
+    def __str__(self):
+        return self.title
+
+
 class CourseTeachingRole(models.TextChoices):
     TEACHER = "teacher", "Teacher"
     TEACHING_ASSISTANT = "teaching_assistant", "Teaching assistant"
