@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -30,11 +31,38 @@ from organization.models import Semester
 
 
 class SeedRelease1CommandTests(TestCase):
+    seeded_models = {
+        "users": User,
+        "roles": Role,
+        "permissions": LMSPermission,
+        "students": Student,
+        "lecturers": Lecturer,
+        "faculties": Faculty,
+        "departments": Department,
+        "organization_programs": OrganizationProgram,
+        "organization_groups": OrganizationGroup,
+        "semesters": Semester,
+        "courses": Course,
+        "assignments": CourseTeachingAssignment,
+        "modules": CourseModule,
+        "topics": CourseTopic,
+        "lessons": Lesson,
+        "materials": LearningMaterial,
+        "enrollments": Enrollment,
+        "events": CalendarEvent,
+    }
+
     def run_seed(self, **options):
         output = StringIO()
         options.setdefault("allow_production", True)
         call_command("seed_release1", stdout=output, **options)
         return output.getvalue()
+
+    def seeded_id_snapshot(self):
+        return {
+            name: list(model.objects.order_by("pk").values_list("pk", flat=True))
+            for name, model in self.seeded_models.items()
+        }
 
     def test_command_creates_release1_roles_and_demo_users(self):
         output = self.run_seed()
@@ -264,72 +292,103 @@ class SeedRelease1CommandTests(TestCase):
 
     def test_command_is_idempotent(self):
         self.run_seed()
-        user_ids = list(
-            User.objects.filter(email__endswith="@su.edu.kg")
-            .order_by("email")
-            .values_list("pk", flat=True)
-        )
-        counts = {
-            "users": User.objects.count(),
-            "roles": Role.objects.count(),
-            "students": Student.objects.count(),
-            "lecturers": Lecturer.objects.count(),
-            "permissions": LMSPermission.objects.count(),
-            "faculties": Faculty.objects.count(),
-            "departments": Department.objects.count(),
-            "organization_programs": OrganizationProgram.objects.count(),
-            "organization_groups": OrganizationGroup.objects.count(),
-            "semesters": Semester.objects.count(),
-            "courses": Course.objects.count(),
-            "assignments": CourseTeachingAssignment.objects.count(),
-            "modules": CourseModule.objects.count(),
-            "topics": CourseTopic.objects.count(),
-            "lessons": Lesson.objects.count(),
-            "materials": LearningMaterial.objects.count(),
-            "enrollments": Enrollment.objects.count(),
-            "events": CalendarEvent.objects.count(),
-        }
+        original_ids = self.seeded_id_snapshot()
 
         self.run_seed()
 
-        self.assertEqual(
-            list(
-                User.objects.filter(email__endswith="@su.edu.kg")
-                .order_by("email")
-                .values_list("pk", flat=True)
-            ),
-            user_ids,
+        self.assertEqual(self.seeded_id_snapshot(), original_ids)
+
+    def test_command_restores_seed_owned_fields_without_replacing_objects(self):
+        self.run_seed()
+        original_ids = self.seeded_id_snapshot()
+
+        User.objects.filter(email="content@su.edu.kg").update(
+            last_name="Changed",
+            is_active=False,
         )
-        self.assertEqual(User.objects.count(), counts["users"])
-        self.assertEqual(Role.objects.count(), counts["roles"])
-        self.assertEqual(Student.objects.count(), counts["students"])
-        self.assertEqual(Lecturer.objects.count(), counts["lecturers"])
-        self.assertEqual(
-            LMSPermission.objects.count(),
-            counts["permissions"],
+        Faculty.objects.filter(code="ENG").update(
+            name="Changed faculty",
+            is_active=False,
         )
-        self.assertEqual(Faculty.objects.count(), counts["faculties"])
-        self.assertEqual(Department.objects.count(), counts["departments"])
-        self.assertEqual(
-            OrganizationProgram.objects.count(),
-            counts["organization_programs"],
+        Course.objects.filter(code="CS101").update(
+            title="Changed course",
+            status=CourseStatus.DRAFT,
+        )
+        module = CourseModule.objects.get(course__code="CS101", order=1)
+        CourseModule.objects.filter(pk=module.pk).update(title="Changed module")
+        topic = CourseTopic.objects.get(module=module, order=1)
+        CourseTopic.objects.filter(pk=topic.pk).update(title="Changed topic")
+        lesson = Lesson.objects.get(topic=topic, order=1)
+        Lesson.objects.filter(pk=lesson.pk).update(
+            content="Changed content",
+            is_published=False,
+        )
+        LearningMaterial.objects.filter(lesson=lesson).update(
+            external_url="https://example.com/changed"
+        )
+        Enrollment.objects.filter(
+            student__email="student@su.edu.kg",
+            course__code="CS101",
+        ).update(status=EnrollmentStatus.WITHDRAWN)
+        CalendarEvent.objects.filter(
+            title="Release 1 event 1",
+        ).update(is_public=False)
+        CourseTeachingAssignment.objects.filter(
+            course__code="CS101",
+            role=CourseTeachingRole.TEACHER,
+        ).update(is_primary=False)
+
+        self.run_seed()
+
+        self.assertEqual(self.seeded_id_snapshot(), original_ids)
+        content_manager = User.objects.get(email="content@su.edu.kg")
+        self.assertEqual(content_manager.last_name, "Manager")
+        self.assertTrue(content_manager.is_active)
+        engineering = Faculty.objects.get(code="ENG")
+        self.assertEqual(engineering.name, "Faculty of Engineering")
+        self.assertTrue(engineering.is_active)
+        course = Course.objects.get(code="CS101")
+        self.assertEqual(course.title, "Introduction to Programming")
+        self.assertEqual(course.status, CourseStatus.PUBLISHED)
+        module.refresh_from_db()
+        topic.refresh_from_db()
+        lesson.refresh_from_db()
+        self.assertEqual(module.title, "Module 1")
+        self.assertEqual(topic.title, "Topic 1.1")
+        self.assertEqual(lesson.content, "Demo learning content.")
+        self.assertTrue(lesson.is_published)
+        self.assertTrue(
+            LearningMaterial.objects.get(lesson=lesson).external_url.startswith(
+                "https://example.com/release1/"
+            )
         )
         self.assertEqual(
-            OrganizationGroup.objects.count(),
-            counts["organization_groups"],
+            Enrollment.objects.get(
+                student__email="student@su.edu.kg",
+                course=course,
+            ).status,
+            EnrollmentStatus.ACTIVE,
         )
-        self.assertEqual(Semester.objects.count(), counts["semesters"])
-        self.assertEqual(Course.objects.count(), counts["courses"])
-        self.assertEqual(
-            CourseTeachingAssignment.objects.count(),
-            counts["assignments"],
+        self.assertTrue(CalendarEvent.objects.get(title="Release 1 event 1").is_public)
+        self.assertTrue(
+            CourseTeachingAssignment.objects.get(
+                course=course,
+                role=CourseTeachingRole.TEACHER,
+            ).is_primary
         )
-        self.assertEqual(CourseModule.objects.count(), counts["modules"])
-        self.assertEqual(CourseTopic.objects.count(), counts["topics"])
-        self.assertEqual(Lesson.objects.count(), counts["lessons"])
-        self.assertEqual(LearningMaterial.objects.count(), counts["materials"])
-        self.assertEqual(Enrollment.objects.count(), counts["enrollments"])
-        self.assertEqual(CalendarEvent.objects.count(), counts["events"])
+
+    def test_command_rolls_back_all_demo_data_when_seeding_fails(self):
+        with patch(
+            "accounts.management.commands.seed_release1.Command._ensure_calendar",
+            side_effect=RuntimeError("seed failure"),
+        ):
+            with self.assertRaisesMessage(RuntimeError, "seed failure"):
+                self.run_seed()
+
+        self.assertFalse(User.objects.filter(email="student@su.edu.kg").exists())
+        self.assertFalse(Faculty.objects.exists())
+        self.assertFalse(Course.objects.exists())
+        self.assertFalse(Lesson.objects.exists())
 
     def test_command_restores_default_role_permissions(self):
         teacher_role = Role.objects.get(code=RoleCode.TEACHER)
