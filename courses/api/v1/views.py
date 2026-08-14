@@ -6,6 +6,7 @@ from rest_framework import filters, generics
 from rest_framework.response import Response
 
 from accounts.models import LMSPermissionCode, RoleCode
+from courses.copying import copy_course, course_copy_queryset
 from courses.lifecycle import transition_course
 from courses.models import (
     Course,
@@ -26,6 +27,7 @@ from .filters import CourseFilter, CourseSearchFilter
 from .pagination import CoursePagination
 from .serializers import (
     CourseDetailSerializer,
+    CourseCopySerializer,
     CourseListSerializer,
     CourseReadinessSerializer,
     ReturnForRevisionSerializer,
@@ -169,6 +171,35 @@ class CourseReadinessView(generics.GenericAPIView):
         del request, args, kwargs
         course = self.get_object()
         return Response(evaluate_course_readiness(course))
+
+
+class CourseCopyView(generics.GenericAPIView):
+    permission_classes = (CourseLifecyclePermission,)
+    serializer_class = CourseCopySerializer
+    required_permission = LMSPermissionCode.COURSES_COPY
+
+    def get_queryset(self):
+        return courses_accessible_to(self.request.user, course_copy_queryset())
+
+    @extend_schema(
+        request=CourseCopySerializer,
+        responses={201: CourseDetailSerializer},
+    )
+    def post(self, request, *args, **kwargs):
+        del args, kwargs
+        source = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        copied_course = copy_course(
+            source,
+            serializer.validated_data["title"],
+            serializer.validated_data["code"],
+            request.user,
+        )
+        return Response(
+            CourseDetailSerializer(copied_course).data,
+            status=201,
+        )
 
 
 class SubmitReviewView(CourseLifecycleView):

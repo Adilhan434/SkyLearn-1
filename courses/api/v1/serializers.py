@@ -3,6 +3,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from accounts.models import RoleCode, User
+from courses.copying import CourseCodeExists
 from courses.models import Course, CourseTeachingAssignment, CourseTeachingRole
 from organization.models import Department, Faculty, Program, Semester
 
@@ -143,6 +144,17 @@ class CourseReadinessSerializer(serializers.Serializer):
     score = serializers.IntegerField(min_value=0, max_value=100)
     ready_for_review = serializers.BooleanField()
     checks = ReadinessCheckSerializer(many=True)
+
+
+class CourseCopySerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=255, allow_blank=False)
+    code = serializers.CharField(max_length=50, allow_blank=False)
+
+    def validate_code(self, value):
+        normalized_code = value.strip().upper()
+        if Course.objects.filter(code__iexact=normalized_code).exists():
+            raise CourseCodeExists()
+        return normalized_code
 
 
 class CourseWriteSerializer(serializers.ModelSerializer):

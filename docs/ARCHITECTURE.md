@@ -200,6 +200,7 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/{id}/publish/` | Publish an Under Review course | Publish permission |
 | `POST /api/v1/courses/{id}/archive/` | Archive a Published course | Archive permission |
 | `POST /api/v1/courses/{id}/restore/` | Restore an Archived course | Archive permission |
+| `POST /api/v1/courses/{id}/copy/` | Copy course metadata and content into a new Draft | Copy permission and course access |
 | `/api/v1/organization/` | Reserved Organization namespace | API deferred |
 
 Course list filtering supports `status`, `semester`, `faculty`, `department`,
@@ -273,6 +274,16 @@ the archive through authenticated endpoints without extraction to disk. Launch
 responses use a sandboxed Content Security Policy and configurable
 `SCORM_FRAME_ANCESTORS`. Gradebook integration, runtime tracking and advanced
 SCORM analytics are intentionally deferred.
+
+Course copies are created by the atomic `courses.copying.copy_course` service.
+It produces a new Draft with copied metadata, modules, topics, lessons, release
+rules and learning-material metadata. Lesson dependencies are remapped to the
+new lesson IDs, and lesson publication flags are reset. Stored course and
+material file objects are referenced rather than physically duplicated. Review
+state, publication metadata, teaching assignments, SCORM packages, enrollments,
+progress and audit history are not copied. The operation requires
+`courses.copy` plus object access to the source course and rolls back completely
+if any nested object cannot be created.
 
 ## 6. Database and runtime
 

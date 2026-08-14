@@ -10,6 +10,7 @@ from learning.api.v1.views import (
 from .views import (
     ArchiveCourseView,
     CourseDetailView,
+    CourseCopyView,
     CourseListCreateView,
     CourseReadinessView,
     PublishCourseView,
@@ -62,4 +63,5 @@ urlpatterns = [
     path("<int:pk>/publish/", PublishCourseView.as_view(), name="publish"),
     path("<int:pk>/archive/", ArchiveCourseView.as_view(), name="archive"),
     path("<int:pk>/restore/", RestoreCourseView.as_view(), name="restore"),
+    path("<int:pk>/copy/", CourseCopyView.as_view(), name="copy"),
 ]

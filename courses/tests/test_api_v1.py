@@ -1,16 +1,29 @@
 from datetime import date
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import Role, RoleCode
+from courses.copying import copy_course
 from courses.models import (
     Course,
     CourseStatus,
     CourseTeachingAssignment,
     CourseTeachingRole,
+)
+from learning.models import (
+    CourseModule,
+    CourseTopic,
+    LearningMaterial,
+    LearningMaterialType,
+    Lesson,
+    ReleaseType,
+    ScormPackage,
+    ScormPackageStatus,
 )
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
@@ -93,6 +106,71 @@ class CourseAPITests(APITestCase):
         }
         values.update(overrides)
         return values
+
+    def copy_url(self, course=None):
+        return reverse(
+            "api-v1:courses-v1:copy",
+            kwargs={"pk": (course or self.course).pk},
+        )
+
+    def build_copy_structure(self):
+        first_module = CourseModule.objects.create(
+            course=self.course,
+            title="Foundations",
+            description="Module description",
+            order=1,
+        )
+        dated_module = CourseModule.objects.create(
+            course=self.course,
+            title="Advanced",
+            order=2,
+            release_type=ReleaseType.DATE,
+            release_at=timezone.now(),
+        )
+        topic = CourseTopic.objects.create(
+            module=first_module,
+            title="Introduction",
+            description="Topic description",
+            order=1,
+        )
+        first_lesson = Lesson.objects.create(
+            topic=topic,
+            title="First lesson",
+            content="Lesson content",
+            order=1,
+            is_published=True,
+        )
+        second_lesson = Lesson.objects.create(
+            topic=topic,
+            title="Second lesson",
+            order=2,
+            release_type=ReleaseType.AFTER_LESSON,
+            required_lesson=first_lesson,
+            is_published=True,
+        )
+        LearningMaterial.objects.create(
+            lesson=first_lesson,
+            course=self.course,
+            title="Handbook",
+            type=LearningMaterialType.PDF,
+            file="learning/materials/handbook.pdf",
+            original_filename="handbook.pdf",
+            mime_type="application/pdf",
+            size=100,
+            extension="pdf",
+            created_by=self.staff,
+            updated_by=self.staff,
+        )
+        ScormPackage.objects.create(
+            lesson=first_lesson,
+            course=self.course,
+            title="SCORM source",
+            file="learning/scorm/source.zip",
+            version="1.2",
+            launch_path="index.html",
+            status=ScormPackageStatus.READY,
+        )
+        return dated_module, first_lesson, second_lesson
 
     def test_list_requires_authentication(self):
         response = self.client.get(self.list_url)
@@ -846,6 +924,132 @@ class CourseAPITests(APITestCase):
         response = self.client.get(f"{self.list_url}999999/")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_content_manager_copies_course_content_into_new_draft(self):
+        dated_module, first_lesson, second_lesson = self.build_copy_structure()
+        teacher = get_user_model().objects.create_user(username="copy-teacher")
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        published_at = timezone.now()
+        self.course.status = CourseStatus.PUBLISHED
+        self.course.review_comment = "Source review"
+        self.course.published_at = published_at
+        self.course.published_by = self.staff
+        self.course.cover = "courses/covers/source.png"
+        self.course.syllabus = "courses/syllabi/source.pdf"
+        self.course.save()
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            self.copy_url(),
+            {"title": "Programming Copy", "code": "copy-2027"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        copied = Course.objects.get(pk=response.data["id"])
+        self.assertEqual(copied.title, "Programming Copy")
+        self.assertEqual(copied.code, "COPY-2027")
+        self.assertEqual(copied.status, CourseStatus.DRAFT)
+        self.assertEqual(copied.description, self.course.description)
+        self.assertEqual(copied.cover.name, self.course.cover.name)
+        self.assertEqual(copied.syllabus.name, self.course.syllabus.name)
+        self.assertEqual(copied.review_comment, "")
+        self.assertIsNone(copied.published_at)
+        self.assertIsNone(copied.published_by)
+        self.assertEqual(copied.created_by, self.user)
+        self.assertEqual(copied.updated_by, self.user)
+        self.assertEqual(copied.modules.count(), 2)
+
+        copied_dated_module = copied.modules.get(order=dated_module.order)
+        self.assertEqual(copied_dated_module.release_type, ReleaseType.DATE)
+        self.assertEqual(copied_dated_module.release_at, dated_module.release_at)
+        copied_lessons = Lesson.objects.filter(topic__module__course=copied).order_by(
+            "order"
+        )
+        copied_first, copied_second = copied_lessons
+        self.assertNotEqual(copied_first.pk, first_lesson.pk)
+        self.assertNotEqual(copied_second.pk, second_lesson.pk)
+        self.assertFalse(copied_first.is_published)
+        self.assertFalse(copied_second.is_published)
+        self.assertEqual(copied_second.required_lesson, copied_first)
+        copied_material = copied_first.materials.get()
+        self.assertEqual(copied_material.original_filename, "handbook.pdf")
+        self.assertEqual(
+            copied_material.file.name,
+            "learning/materials/handbook.pdf",
+        )
+        self.assertEqual(copied_material.created_by, self.user)
+        self.assertFalse(copied.teaching_assignments.exists())
+        self.assertFalse(copied.scorm_packages.exists())
+
+    def test_copy_requires_authentication_and_copy_permission(self):
+        anonymous_response = self.client.post(
+            self.copy_url(),
+            {"title": "Anonymous Copy", "code": "ANON-COPY"},
+            format="json",
+        )
+        teacher = get_user_model().objects.create_user(username="copy-denied")
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        self.client.force_authenticate(teacher)
+
+        forbidden_response = self.client.post(
+            self.copy_url(),
+            {"title": "Teacher Copy", "code": "TEACHER-COPY"},
+            format="json",
+        )
+
+        self.assertEqual(
+            anonymous_response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+        self.assertEqual(
+            forbidden_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_copy_rejects_duplicate_code_with_stable_error(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            self.copy_url(),
+            {"title": "Duplicate", "code": self.course.code.lower()},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "course_code_exists")
+        self.assertEqual(Course.objects.count(), 1)
+
+    def test_copy_is_atomic_when_nested_content_creation_fails(self):
+        self.build_copy_structure()
+        initial_course_count = Course.objects.count()
+
+        with patch.object(
+            LearningMaterial.objects,
+            "create",
+            side_effect=RuntimeError("copy failed"),
+        ), self.assertRaisesMessage(RuntimeError, "copy failed"):
+            copy_course(
+                self.course,
+                "Rolled Back Copy",
+                "ROLLBACK-COPY",
+                self.user,
+            )
+
+        self.assertEqual(Course.objects.count(), initial_course_count)
+        self.assertFalse(Course.objects.filter(code="ROLLBACK-COPY").exists())
+
     def test_routes_have_stable_names(self):
         self.assertEqual(
             reverse("api-v1:courses-v1:list-create"),
@@ -854,4 +1058,8 @@ class CourseAPITests(APITestCase):
         self.assertEqual(
             reverse("api-v1:courses-v1:detail", kwargs={"pk": self.course.pk}),
             f"{self.list_url}{self.course.pk}/",
+        )
+        self.assertEqual(
+            self.copy_url(),
+            f"{self.list_url}{self.course.pk}/copy/",
         )
