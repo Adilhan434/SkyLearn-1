@@ -314,9 +314,9 @@ class CourseAPITests(APITestCase):
             self.list_url,
             {"ordering": "start_date"},
         )
-        newest_response = self.client.get(
+        descending_code_response = self.client.get(
             self.list_url,
-            {"ordering": "-created_at"},
+            {"ordering": "-code"},
         )
 
         self.assertEqual(
@@ -330,8 +330,8 @@ class CourseAPITests(APITestCase):
             first_alphabetically.pk,
         )
         self.assertEqual(
-            newest_response.data["results"][0]["code"],
-            "AA-COURSE",
+            descending_code_response.data["results"][0]["code"],
+            "ZZ-COURSE",
         )
 
     def test_list_supports_page_and_page_size(self):

@@ -144,5 +144,5 @@ class CourseModelTests(TestCase):
         app_models = {model.__name__ for model in Course._meta.app_config.get_models()}
         self.assertEqual(
             app_models,
-            {"Course", "CourseTeachingAssignment"},
+            {"Course", "CourseTeachingAssignment", "CourseStatusHistory"},
         )

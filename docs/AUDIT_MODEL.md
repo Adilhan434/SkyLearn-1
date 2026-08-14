@@ -16,8 +16,10 @@ must not delete Organization or Course records. Nullable values also allow
 data migrations, imports and automated system operations that have no acting
 user.
 
-This mechanism records ownership and timestamps only. It is not a complete
-Audit Log and does not store field-level history.
+This shared mechanism records ownership and timestamps only. Lifecycle status
+changes additionally create `courses.CourseStatusHistory` records containing
+the action, previous status, new status, optional review comment and actor.
+It is still not a general field-level Audit Log.
 
 ## Using the model
 

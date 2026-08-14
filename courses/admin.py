@@ -2,7 +2,12 @@ from django.contrib import admin
 
 from audit.admin import AuditAdminMixin
 
-from .models import Course, CourseStatus, CourseTeachingAssignment
+from .models import (
+    Course,
+    CourseStatus,
+    CourseStatusHistory,
+    CourseTeachingAssignment,
+)
 
 
 class CourseTeachingAssignmentInline(admin.TabularInline):
@@ -48,3 +53,29 @@ class CourseTeachingAssignmentAdmin(AuditAdminMixin, admin.ModelAdmin):
     )
     autocomplete_fields = ("course", "user")
     list_select_related = ("course", "user")
+
+
+@admin.register(CourseStatusHistory)
+class CourseStatusHistoryAdmin(AuditAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "course",
+        "action",
+        "from_status",
+        "to_status",
+        "created_by",
+        "created_at",
+    )
+    list_filter = ("action", "from_status", "to_status")
+    search_fields = ("course__code", "course__title", "comment")
+    list_select_related = ("course", "created_by")
+    readonly_fields = (
+        "course",
+        "action",
+        "from_status",
+        "to_status",
+        "comment",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+    )

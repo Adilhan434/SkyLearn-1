@@ -79,3 +79,24 @@ class CourseAccessPermission(BasePermission):
             request.user,
             Course.objects.filter(pk=obj.pk),
         ).exists()
+
+
+class CourseLifecyclePermission(BasePermission):
+    """Require an action-specific permission and course membership."""
+
+    message = "Course lifecycle action is not allowed."
+
+    def has_permission(self, request, view):
+        user = request.user
+        required_permission = getattr(view, "required_permission", None)
+        return bool(
+            has_course_management_role(user)
+            and required_permission
+            and user.has_lms_permission(required_permission)
+        )
+
+    def has_object_permission(self, request, view, obj):
+        return courses_accessible_to(
+            request.user,
+            Course.objects.filter(pk=obj.pk),
+        ).exists()

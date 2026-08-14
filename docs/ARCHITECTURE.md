@@ -102,7 +102,7 @@ is not part of the current foundation scope.
 - identity: `title`, globally unique `code`, `description`;
 - academic metadata: `language`, `credits`, `semester`;
 - organization scope: `faculty`, `department`, `program`;
-- lifecycle: `draft`, `under_review`, `published`, `archived`;
+- lifecycle: `draft`, `under_review`, `needs_revision`, `published`, `archived`;
 - schedule: `start_date`, `end_date`;
 - files: `cover`, `syllabus`;
 - common audit fields.
@@ -112,9 +112,10 @@ Program must belong to that Department. Archived courses reject ordinary
 model saves and Django Admin changes. An intentional maintenance correction
 must use the explicit archived-update path.
 
-Teacher and Course Assistant assignments are intentionally deferred. They can
-later be represented by dedicated assignment/through models without changing
-the base Course metadata contract.
+Teacher and Course Assistant assignments use `CourseTeachingAssignment`.
+Lifecycle transitions are atomic, permission-controlled operations and create
+immutable `CourseStatusHistory` records. Publication stores `published_at` and
+`published_by`; a return for revision preserves the reviewer comment.
 
 Quiz, Gradebook, Assignment, Module, Topic, Lesson and Learning Object are not
 part of this model or the current task.
@@ -150,6 +151,11 @@ The versioned API is mounted in `api.v1.urls`:
 | `GET /api/v1/courses/` | Paginated searchable and filterable course list | Authenticated |
 | `POST /api/v1/courses/` | Create a course | Staff/admin |
 | `GET /api/v1/courses/{id}/` | Retrieve course metadata | Authenticated |
+| `POST /api/v1/courses/{id}/submit-review/` | Submit Draft/Needs Revision course | Submit-review permission |
+| `POST /api/v1/courses/{id}/return-for-revision/` | Return Under Review course with a comment | Review permission |
+| `POST /api/v1/courses/{id}/publish/` | Publish an Under Review course | Publish permission |
+| `POST /api/v1/courses/{id}/archive/` | Archive a Published course | Archive permission |
+| `POST /api/v1/courses/{id}/restore/` | Restore an Archived course | Archive permission |
 | `/api/v1/organization/` | Reserved Organization namespace | API deferred |
 
 Course list filtering supports `status`, `semester`, `faculty`, `department`,

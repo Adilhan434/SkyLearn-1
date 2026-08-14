@@ -1,17 +1,22 @@
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers
 from rest_framework import filters, generics
+from rest_framework.response import Response
 
-from accounts.models import RoleCode
+from accounts.models import LMSPermissionCode, RoleCode
+from courses.lifecycle import transition_course
 from courses.models import (
     Course,
+    CourseLifecycleAction,
     CourseStatus,
     CourseTeachingAssignment,
     CourseTeachingRole,
 )
 from courses.permissions import (
     CourseAccessPermission,
+    CourseLifecyclePermission,
     courses_accessible_to,
     has_global_course_access,
 )
@@ -21,6 +26,7 @@ from .pagination import CoursePagination
 from .serializers import (
     CourseDetailSerializer,
     CourseListSerializer,
+    ReturnForRevisionSerializer,
     CourseWriteSerializer,
 )
 
@@ -89,6 +95,7 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
         queryset = course_read_queryset().select_related(
             "created_by",
             "updated_by",
+            "published_by",
         )
         return courses_accessible_to(self.request.user, queryset)
 
@@ -108,10 +115,15 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
         if (
             is_teacher
             and not has_global_course_access(user)
-            and course.status != CourseStatus.DRAFT
+            and course.status
+            not in {CourseStatus.DRAFT, CourseStatus.NEEDS_REVISION}
         ):
             raise serializers.ValidationError(
-                {"status": "Teachers can edit only draft courses."}
+                {
+                    "status": (
+                        "Teachers can edit only draft or needs-revision courses."
+                    )
+                }
             )
         serializer.save()
 
@@ -121,3 +133,71 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
                 {"status": "Only draft courses can be permanently deleted."}
             )
         instance.delete()
+
+
+class CourseLifecycleView(generics.GenericAPIView):
+    permission_classes = (CourseLifecyclePermission,)
+    serializer_class = CourseDetailSerializer
+    action = None
+    required_permission = None
+
+    def get_queryset(self):
+        return courses_accessible_to(self.request.user, course_read_queryset())
+
+    def post(self, request, *args, **kwargs):
+        course = self.get_object()
+        comment = ""
+        if self.action == CourseLifecycleAction.RETURN_REVISION:
+            input_serializer = ReturnForRevisionSerializer(data=request.data)
+            input_serializer.is_valid(raise_exception=True)
+            comment = input_serializer.validated_data["comment"]
+        course = transition_course(course, self.action, request.user, comment)
+        return Response(CourseDetailSerializer(course).data)
+
+
+class SubmitReviewView(CourseLifecycleView):
+    action = CourseLifecycleAction.SUBMIT_REVIEW
+    required_permission = LMSPermissionCode.COURSES_SUBMIT_REVIEW
+
+    @extend_schema(request=None, responses=CourseDetailSerializer)
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+class ReturnForRevisionView(CourseLifecycleView):
+    action = CourseLifecycleAction.RETURN_REVISION
+    required_permission = LMSPermissionCode.COURSES_REVIEW
+
+    @extend_schema(
+        request=ReturnForRevisionSerializer,
+        responses=CourseDetailSerializer,
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+class PublishCourseView(CourseLifecycleView):
+    action = CourseLifecycleAction.PUBLISH
+    required_permission = LMSPermissionCode.COURSES_PUBLISH
+
+    @extend_schema(request=None, responses=CourseDetailSerializer)
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+class ArchiveCourseView(CourseLifecycleView):
+    action = CourseLifecycleAction.ARCHIVE
+    required_permission = LMSPermissionCode.COURSES_ARCHIVE
+
+    @extend_schema(request=None, responses=CourseDetailSerializer)
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+class RestoreCourseView(CourseLifecycleView):
+    action = CourseLifecycleAction.RESTORE
+    required_permission = LMSPermissionCode.COURSES_ARCHIVE
+
+    @extend_schema(request=None, responses=CourseDetailSerializer)
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)

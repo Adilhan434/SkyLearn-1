@@ -98,6 +98,7 @@ class CourseDetailSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
     program = ProgramSummarySerializer(read_only=True)
     created_by = serializers.PrimaryKeyRelatedField(read_only=True)
     updated_by = serializers.PrimaryKeyRelatedField(read_only=True)
+    published_by = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Course
@@ -118,11 +119,18 @@ class CourseDetailSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
             "end_date",
             "cover",
             "syllabus",
+            "review_comment",
+            "published_at",
+            "published_by",
             "created_by",
             "updated_by",
             "created_at",
             "updated_at",
         )
+
+
+class ReturnForRevisionSerializer(serializers.Serializer):
+    comment = serializers.CharField(allow_blank=False, trim_whitespace=True)
 
 
 class CourseWriteSerializer(serializers.ModelSerializer):

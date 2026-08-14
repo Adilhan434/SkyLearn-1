@@ -13,6 +13,7 @@ from organization.models import Department, Faculty, Program, Semester
 class CourseStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     UNDER_REVIEW = "under_review", "Under review"
+    NEEDS_REVISION = "needs_revision", "Needs revision"
     PUBLISHED = "published", "Published"
     ARCHIVED = "archived", "Archived"
 
@@ -67,6 +68,15 @@ class Course(AuditModel):
     end_date = models.DateField()
     cover = models.ImageField(upload_to="courses/covers/", blank=True)
     syllabus = models.FileField(upload_to="courses/syllabi/", blank=True)
+    review_comment = models.TextField(blank=True)
+    published_at = models.DateTimeField(blank=True, null=True)
+    published_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="courses_published",
+    )
 
     class Meta:
         ordering = ("code",)
@@ -120,6 +130,14 @@ class Course(AuditModel):
 class CourseTeachingRole(models.TextChoices):
     TEACHER = "teacher", "Teacher"
     TEACHING_ASSISTANT = "teaching_assistant", "Teaching assistant"
+
+
+class CourseLifecycleAction(models.TextChoices):
+    SUBMIT_REVIEW = "submit_review", "Submit for review"
+    RETURN_REVISION = "return_revision", "Return for revision"
+    PUBLISH = "publish", "Publish"
+    ARCHIVE = "archive", "Archive"
+    RESTORE = "restore", "Restore"
 
 
 class CourseTeachingAssignment(AuditModel):
@@ -197,3 +215,32 @@ class CourseTeachingAssignment(AuditModel):
 
     def __str__(self):
         return f"{self.course.code} - {self.user} ({self.role})"
+
+
+class CourseStatusHistory(AuditModel):
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="status_history",
+    )
+    action = models.CharField(
+        max_length=30,
+        choices=CourseLifecycleAction.choices,
+    )
+    from_status = models.CharField(max_length=20, choices=CourseStatus.choices)
+    to_status = models.CharField(max_length=20, choices=CourseStatus.choices)
+    comment = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [
+            models.Index(
+                fields=("course", "created_at"),
+                name="course_history_course_time_idx",
+            ),
+        ]
+        verbose_name = "Course status history"
+        verbose_name_plural = "Course status history"
+
+    def __str__(self):
+        return f"{self.course.code}: {self.from_status} -> {self.to_status}"
