@@ -116,6 +116,12 @@ class CourseStructureAPITests(APITestCase):
             kwargs={"course_pk": self.course.pk},
         )
 
+    def reorder_url(self):
+        return reverse(
+            "api-v1:courses-v1:structure-reorder",
+            kwargs={"pk": self.course.pk},
+        )
+
     @staticmethod
     def module_detail_url(module):
         return reverse(
@@ -960,3 +966,247 @@ class CourseStructureAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(response.data["error"]["code"], "lesson_is_required")
         self.assertTrue(Lesson.objects.filter(pk=lesson.pk).exists())
+
+    def test_manager_can_reorder_modules_atomically(self):
+        structure = self.create_structure()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "module",
+                "items": [
+                    {"id": structure["second_module"].pk, "order": 1},
+                    {"id": structure["first_module"].pk, "order": 2},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [module["id"] for module in response.data["modules"]],
+            [structure["second_module"].pk, structure["first_module"].pk],
+        )
+        structure["second_module"].refresh_from_db()
+        structure["first_module"].refresh_from_db()
+        self.assertEqual(structure["second_module"].order, 1)
+        self.assertEqual(structure["first_module"].order, 2)
+        self.assertEqual(structure["first_module"].updated_by, self.manager)
+
+    def test_manager_can_reorder_topics(self):
+        structure = self.create_structure()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "topic",
+                "items": [
+                    {"id": structure["second_topic"].pk, "order": 1},
+                    {"id": structure["first_topic"].pk, "order": 2},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        topics = response.data["modules"][0]["topics"]
+        self.assertEqual(
+            [topic["id"] for topic in topics],
+            [structure["second_topic"].pk, structure["first_topic"].pk],
+        )
+
+    def test_assigned_teacher_can_reorder_lessons(self):
+        structure = self.create_structure()
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "lesson",
+                "items": [
+                    {"id": structure["second_lesson"].pk, "order": 1},
+                    {"id": structure["first_lesson"].pk, "order": 2},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        lessons = response.data["modules"][0]["topics"][0]["lessons"]
+        self.assertEqual(
+            [lesson["id"] for lesson in lessons],
+            [structure["second_lesson"].pk, structure["first_lesson"].pk],
+        )
+        structure["first_lesson"].refresh_from_db()
+        self.assertEqual(structure["first_lesson"].updated_by, self.teacher)
+
+    def test_reorder_rejects_duplicate_ids_without_partial_changes(self):
+        structure = self.create_structure()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "module",
+                "items": [
+                    {"id": structure["first_module"].pk, "order": 2},
+                    {"id": structure["first_module"].pk, "order": 1},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"]["code"], "invalid_structure_order"
+        )
+        structure["first_module"].refresh_from_db()
+        structure["second_module"].refresh_from_db()
+        self.assertEqual(structure["first_module"].order, 1)
+        self.assertEqual(structure["second_module"].order, 2)
+
+    def test_reorder_rejects_non_contiguous_orders(self):
+        structure = self.create_structure()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "module",
+                "items": [
+                    {"id": structure["first_module"].pk, "order": 1},
+                    {"id": structure["second_module"].pk, "order": 3},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"]["code"], "invalid_structure_order"
+        )
+
+    def test_reorder_requires_complete_sibling_list(self):
+        structure = self.create_structure()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "module",
+                "items": [{"id": structure["first_module"].pk, "order": 1}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"]["code"], "invalid_structure_order"
+        )
+
+    def test_reorder_rejects_items_with_different_parents(self):
+        structure = self.create_structure()
+        foreign_topic = CourseTopic.objects.create(
+            module=structure["second_module"],
+            title="Other Parent Topic",
+            order=1,
+        )
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "topic",
+                "items": [
+                    {"id": structure["first_topic"].pk, "order": 1},
+                    {"id": foreign_topic.pk, "order": 2},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"]["code"], "invalid_structure_order"
+        )
+
+    def test_reorder_rejects_item_from_another_course(self):
+        structure = self.create_structure()
+        other_course = Course.objects.create(
+            title="Foreign Reorder Course",
+            code="FOREIGN-REORDER",
+            credits=self.course.credits,
+            semester=self.course.semester,
+            faculty=self.course.faculty,
+            department=self.course.department,
+            program=self.course.program,
+            start_date=self.course.start_date,
+            end_date=self.course.end_date,
+        )
+        foreign_module = CourseModule.objects.create(
+            course=other_course,
+            title="Foreign Module",
+            order=1,
+        )
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "module",
+                "items": [
+                    {"id": structure["first_module"].pk, "order": 1},
+                    {"id": foreign_module.pk, "order": 2},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"]["code"], "invalid_structure_order"
+        )
+
+    def test_unassigned_teacher_cannot_reorder_structure(self):
+        structure = self.create_structure()
+        teacher = get_user_model().objects.create_user(
+            username="foreign-reorder-teacher"
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(teacher)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "module",
+                "items": [
+                    {"id": structure["first_module"].pk, "order": 1},
+                    {"id": structure["second_module"].pk, "order": 2},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_archived_course_structure_cannot_be_reordered(self):
+        structure = self.create_structure()
+        self.course.status = "archived"
+        self.course.save(update_fields=("status",))
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.reorder_url(),
+            {
+                "type": "module",
+                "items": [
+                    {"id": structure["second_module"].pk, "order": 1},
+                    {"id": structure["first_module"].pk, "order": 2},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

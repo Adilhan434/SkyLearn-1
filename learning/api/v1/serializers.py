@@ -10,6 +10,7 @@ from learning.models import (
     LessonType,
     ReleaseType,
 )
+from learning.reordering import InvalidStructureOrder
 
 
 class StructureLessonSerializer(serializers.ModelSerializer):
@@ -401,3 +402,35 @@ class LessonWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"order": "A lesson with this order already exists."}
             )
+
+
+class StructureReorderItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    order = serializers.IntegerField(min_value=1)
+
+
+class StructureReorderSerializer(serializers.Serializer):
+    type = serializers.CharField()
+    items = StructureReorderItemSerializer(many=True)
+
+    def validate_type(self, value):
+        if value not in {"module", "topic", "lesson"}:
+            raise InvalidStructureOrder(
+                "Type must be module, topic or lesson."
+            )
+        return value
+
+    def validate_items(self, items):
+        if not items:
+            raise InvalidStructureOrder("At least one item is required.")
+        item_ids = [item["id"] for item in items]
+        orders = [item["order"] for item in items]
+        if len(item_ids) != len(set(item_ids)):
+            raise InvalidStructureOrder("Item IDs must be unique.")
+        if len(orders) != len(set(orders)):
+            raise InvalidStructureOrder("Order values must be unique.")
+        if set(orders) != set(range(1, len(items) + 1)):
+            raise InvalidStructureOrder(
+                "Order values must form a continuous sequence from 1."
+            )
+        return items

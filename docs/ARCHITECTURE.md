@@ -24,7 +24,7 @@ integration task requires it.
 | `organization` | Faculties, departments, academic programs, student groups and semesters | Active models and Admin; API deferred |
 | `courses` | Release 1 course metadata and Course list/create/detail API | Active |
 | `enrollments` | Future enrollment ownership and lifecycle | Reserved; no models yet |
-| `learning` | Ordered course modules, topics, lessons and release conditions | Active models, Admin and read API |
+| `learning` | Ordered course modules, topics, lessons and release conditions | Active models, Admin and structure management API |
 | `progress` | Future student progress and completion state | Reserved; no models yet |
 
 The project follows its existing top-level Django app layout. The new apps are
@@ -164,6 +164,7 @@ The versioned API is mounted in `api.v1.urls`:
 | `GET /api/v1/courses/{id}/` | Retrieve course metadata | Authenticated |
 | `GET /api/v1/courses/{id}/readiness/` | Course readiness score and checks | Course view permission |
 | `GET /api/v1/courses/{id}/structure/` | Nested Module, Topic and Lesson structure | Course view permission |
+| `POST /api/v1/courses/{id}/structure/reorder/` | Atomically reorder sibling modules, topics or lessons | Structure-manage permission |
 | `POST /api/v1/courses/{id}/modules/` | Append or explicitly order a module | Structure-manage permission |
 | `PATCH /api/v1/modules/{id}/` | Update module metadata and release settings | Structure-manage permission |
 | `DELETE /api/v1/modules/{id}/` | Safely delete a module | Structure-manage permission |
@@ -204,6 +205,13 @@ Lesson writes validate type, order, date releases and prerequisite ownership.
 Self-references, cross-course prerequisites and dependency cycles return a
 validation error. Deleting a prerequisite used by another lesson returns
 `409 lesson_is_required`.
+
+Structure reordering accepts a `type` of `module`, `topic` or `lesson` and a
+complete sibling list in `items`. IDs and order values must be unique, all
+items must have the same parent, and order values must be the continuous
+sequence `1..N`. The operation locks the course and affected rows and commits
+as one transaction. Invalid or incomplete input returns the stable error code
+`invalid_structure_order` without a partial reorder.
 
 ## 6. Database and runtime
 
@@ -246,7 +254,6 @@ The following functionality is outside the current foundation:
 
 - Organization CRUD API;
 - Enrollment API;
-- modules, topics and lessons;
 - learning objects and SCORM;
 - assignments, quizzes and Gradebook;
 - student progress and calendar;

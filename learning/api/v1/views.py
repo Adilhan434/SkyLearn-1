@@ -12,6 +12,7 @@ from learning.permissions import (
     StructureManagePermission,
     StructureObjectPermission,
 )
+from learning.reordering import reorder_structure
 
 from .serializers import (
     CourseModuleWriteSerializer,
@@ -19,6 +20,7 @@ from .serializers import (
     CourseTopicWriteSerializer,
     DeleteConfirmationSerializer,
     LessonWriteSerializer,
+    StructureReorderSerializer,
 )
 
 
@@ -215,3 +217,30 @@ class LessonDetailView(generics.RetrieveUpdateDestroyAPIView):
             raise LessonIsRequired()
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class StructureReorderView(generics.GenericAPIView):
+    permission_classes = (StructureManagePermission,)
+    serializer_class = StructureReorderSerializer
+
+    def get_course(self):
+        course = get_object_or_404(
+            courses_accessible_to(self.request.user),
+            pk=self.kwargs["pk"],
+        )
+        self.check_object_permissions(self.request, course)
+        return course
+
+    def post(self, request, *args, **kwargs):
+        del args, kwargs
+        course = self.get_course()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reorder_structure(
+            course,
+            serializer.validated_data["type"],
+            serializer.validated_data["items"],
+            request.user,
+        )
+        reordered_course = course_structure_queryset().get(pk=course.pk)
+        return Response(CourseStructureSerializer(reordered_course).data)
