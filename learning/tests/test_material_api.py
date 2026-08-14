@@ -1,5 +1,7 @@
 from datetime import date
+import struct
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -21,11 +23,25 @@ from learning.models import (
     LearningMaterial,
     LearningMaterialType,
     Lesson,
+    VideoProcessingStatus,
 )
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
 PDF_CONTENT = b"%PDF-1.4\nprotected content\n%%EOF"
+
+
+def mp4_box(box_type, payload):
+    return struct.pack(">I4s", len(payload) + 8, box_type) + payload
+
+
+MP4_CONTENT = mp4_box(b"ftyp", b"isom\x00\x00\x02\x00isommp42") + mp4_box(
+    b"moov",
+    mp4_box(
+        b"mvhd",
+        b"\x00\x00\x00\x00" + struct.pack(">IIII", 0, 0, 1000, 12500),
+    ),
+)
 
 
 class LearningMaterialAPITests(APITestCase):
@@ -127,6 +143,13 @@ class LearningMaterialAPITests(APITestCase):
     def download_url(material):
         return reverse(
             "api-v1:learning-v1:material-download",
+            kwargs={"pk": material.pk},
+        )
+
+    @staticmethod
+    def playback_url(material):
+        return reverse(
+            "api-v1:learning-v1:material-playback",
             kwargs={"pk": material.pk},
         )
 
@@ -418,6 +441,109 @@ class LearningMaterialAPITests(APITestCase):
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertIn("download.pdf", response["Content-Disposition"])
         self.assertEqual(body, PDF_CONTENT)
+
+    def upload_video(self, filename="lesson.mp4"):
+        return self.client.post(
+            self.lesson_material_url(),
+            {
+                "title": "Video lesson",
+                "type": LearningMaterialType.VIDEO,
+                "file": SimpleUploadedFile(
+                    filename,
+                    MP4_CONTENT,
+                    content_type="video/mp4",
+                ),
+            },
+            format="multipart",
+        )
+
+    def test_video_upload_extracts_metadata_and_returns_playback_url(self):
+        self.client.force_authenticate(self.manager)
+
+        response = self.upload_video()
+        material = LearningMaterial.objects.get(pk=response.data["id"])
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["video_status"],
+            VideoProcessingStatus.READY,
+        )
+        self.assertEqual(response.data["duration_seconds"], 13)
+        self.assertEqual(
+            response.data["playback_url"],
+            self.playback_url(material),
+        )
+        self.assertEqual(response.data["mime_type"], "video/mp4")
+
+    def test_ready_video_can_be_played_through_protected_endpoint(self):
+        self.client.force_authenticate(self.manager)
+        upload_response = self.upload_video("playback.mp4")
+        material = LearningMaterial.objects.get(pk=upload_response.data["id"])
+
+        response = self.client.get(self.playback_url(material))
+        body = b"".join(response.streaming_content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "video/mp4")
+        self.assertIn("inline", response["Content-Disposition"])
+        self.assertEqual(body, MP4_CONTENT)
+
+    def test_video_playback_requires_authentication(self):
+        material = self.create_file_material(
+            type=LearningMaterialType.VIDEO,
+            file="learning/materials/video.mp4",
+            video_status=VideoProcessingStatus.READY,
+        )
+
+        response = self.client.get(self.playback_url(material))
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unassigned_teacher_cannot_play_video(self):
+        material = self.create_file_material(
+            type=LearningMaterialType.VIDEO,
+            file="learning/materials/video.mp4",
+            video_status=VideoProcessingStatus.READY,
+        )
+        teacher = get_user_model().objects.create_user(
+            username="unassigned-video-teacher"
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(teacher)
+
+        response = self.client.get(self.playback_url(material))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_video_playback_requires_ready_status(self):
+        material = self.create_file_material(
+            type=LearningMaterialType.VIDEO,
+            file="learning/materials/video.mp4",
+            video_status=VideoProcessingStatus.PROCESSING,
+        )
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(self.playback_url(material))
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["error"]["code"], "video_not_ready")
+
+    @patch(
+        "learning.video_processing.probe_video_duration",
+        side_effect=OSError("storage unavailable"),
+    )
+    def test_video_processing_failure_is_exposed_as_status(self, _probe):
+        self.client.force_authenticate(self.manager)
+
+        response = self.upload_video("failed.mp4")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["video_status"],
+            VideoProcessingStatus.FAILED,
+        )
+        self.assertIsNone(response.data["duration_seconds"])
+        self.assertIsNone(response.data["playback_url"])
 
     def test_private_material_has_no_direct_storage_url(self):
         self.client.force_authenticate(self.manager)

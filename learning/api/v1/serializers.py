@@ -16,8 +16,10 @@ from learning.models import (
     Lesson,
     LessonType,
     ReleaseType,
+    VideoProcessingStatus,
 )
 from learning.reordering import InvalidStructureOrder
+from learning.video_processing import VideoProcessingService
 
 
 class StructureLessonSerializer(serializers.ModelSerializer):
@@ -105,7 +107,8 @@ class CourseModuleWriteSerializer(serializers.ModelSerializer):
 
     def validate_release_type(self, value):
         allowed_values = {
-            choice_value for choice_value, _label in CourseModule._meta.get_field(
+            choice_value
+            for choice_value, _label in CourseModule._meta.get_field(
                 "release_type"
             ).choices
         }
@@ -135,14 +138,10 @@ class CourseModuleWriteSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        course = Course.objects.select_for_update().get(
-            pk=self.context["course"].pk
-        )
+        course = Course.objects.select_for_update().get(pk=self.context["course"].pk)
         actor = self.context["request"].user
         if "order" not in validated_data:
-            maximum_order = course.modules.aggregate(maximum=Max("order"))[
-                "maximum"
-            ]
+            maximum_order = course.modules.aggregate(maximum=Max("order"))["maximum"]
             validated_data["order"] = (maximum_order or 0) + 1
         self._validate_unique_order(course, validated_data["order"])
         return CourseModule.objects.create(
@@ -207,9 +206,7 @@ class CourseTopicWriteSerializer(serializers.ModelSerializer):
         )
         actor = self.context["request"].user
         if "order" not in validated_data:
-            maximum_order = module.topics.aggregate(maximum=Max("order"))[
-                "maximum"
-            ]
+            maximum_order = module.topics.aggregate(maximum=Max("order"))["maximum"]
             validated_data["order"] = (maximum_order or 0) + 1
         self._validate_unique_order(module, validated_data["order"])
         return CourseTopic.objects.create(
@@ -315,22 +312,22 @@ class LessonWriteSerializer(serializers.ModelSerializer):
             if release_at is None:
                 errors["release_at"] = "A date-based lesson requires release_at."
             if required_lesson is not None:
-                errors["required_lesson"] = (
-                    "A date-based lesson cannot require another lesson."
-                )
+                errors[
+                    "required_lesson"
+                ] = "A date-based lesson cannot require another lesson."
         elif release_type == ReleaseType.AFTER_LESSON:
             if required_lesson is None:
-                errors["required_lesson"] = (
-                    "An after-lesson release requires required_lesson."
-                )
+                errors[
+                    "required_lesson"
+                ] = "An after-lesson release requires required_lesson."
             if release_at is not None:
-                errors["release_at"] = (
-                    "An after-lesson release cannot define release_at."
-                )
+                errors[
+                    "release_at"
+                ] = "An after-lesson release cannot define release_at."
         elif release_at is not None or required_lesson is not None:
-            errors["release_type"] = (
-                "Release fields do not match the selected release type."
-            )
+            errors[
+                "release_type"
+            ] = "Release fields do not match the selected release type."
 
         if required_lesson is not None:
             self._validate_required_lesson(
@@ -349,37 +346,33 @@ class LessonWriteSerializer(serializers.ModelSerializer):
             errors["required_lesson"] = "A lesson cannot require itself."
             return
         if required_lesson.topic.module.course_id != topic.module.course_id:
-            errors["required_lesson"] = (
-                "The required lesson must belong to the same course."
-            )
+            errors[
+                "required_lesson"
+            ] = "The required lesson must belong to the same course."
             return
 
         visited = set()
         current = required_lesson
         while current is not None:
             if instance is not None and current.pk == instance.pk:
-                errors["required_lesson"] = (
-                    "The required lesson would create a dependency cycle."
-                )
+                errors[
+                    "required_lesson"
+                ] = "The required lesson would create a dependency cycle."
                 return
             if current.pk in visited:
-                errors["required_lesson"] = (
-                    "The required lesson chain already contains a cycle."
-                )
+                errors[
+                    "required_lesson"
+                ] = "The required lesson chain already contains a cycle."
                 return
             visited.add(current.pk)
             current = current.required_lesson
 
     @transaction.atomic
     def create(self, validated_data):
-        topic = CourseTopic.objects.select_for_update().get(
-            pk=self.context["topic"].pk
-        )
+        topic = CourseTopic.objects.select_for_update().get(pk=self.context["topic"].pk)
         actor = self.context["request"].user
         if "order" not in validated_data:
-            maximum_order = topic.lessons.aggregate(maximum=Max("order"))[
-                "maximum"
-            ]
+            maximum_order = topic.lessons.aggregate(maximum=Max("order"))["maximum"]
             validated_data["order"] = (maximum_order or 0) + 1
         self._validate_unique_order(topic, validated_data["order"])
         return Lesson.objects.create(
@@ -422,9 +415,7 @@ class StructureReorderSerializer(serializers.Serializer):
 
     def validate_type(self, value):
         if value not in {"module", "topic", "lesson"}:
-            raise InvalidStructureOrder(
-                "Type must be module, topic or lesson."
-            )
+            raise InvalidStructureOrder("Type must be module, topic or lesson.")
         return value
 
     def validate_items(self, items):
@@ -447,6 +438,7 @@ class LearningMaterialSerializer(serializers.ModelSerializer):
     file = serializers.FileField(write_only=True, required=False)
     download_allowed = serializers.BooleanField(required=False, default=True)
     download_url = serializers.SerializerMethodField()
+    playback_url = serializers.SerializerMethodField()
 
     class Meta:
         model = LearningMaterial
@@ -465,6 +457,9 @@ class LearningMaterialSerializer(serializers.ModelSerializer):
             "extension",
             "download_allowed",
             "download_url",
+            "video_status",
+            "duration_seconds",
+            "playback_url",
             "created_by",
             "updated_by",
             "created_at",
@@ -479,6 +474,9 @@ class LearningMaterialSerializer(serializers.ModelSerializer):
             "size",
             "extension",
             "download_url",
+            "video_status",
+            "duration_seconds",
+            "playback_url",
             "created_by",
             "updated_by",
             "created_at",
@@ -491,6 +489,19 @@ class LearningMaterialSerializer(serializers.ModelSerializer):
             return None
         return reverse(
             "api-v1:learning-v1:material-download",
+            kwargs={"pk": obj.pk},
+        )
+
+    @extend_schema_field(OpenApiTypes.URI)
+    def get_playback_url(self, obj):
+        if (
+            obj.type != LearningMaterialType.VIDEO
+            or not obj.file
+            or obj.video_status != VideoProcessingStatus.READY
+        ):
+            return None
+        return reverse(
+            "api-v1:learning-v1:material-playback",
             kwargs={"pk": obj.pk},
         )
 
@@ -554,7 +565,13 @@ class LearningMaterialSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         if validated_data.get("file") is not None:
             validated_data["external_url"] = ""
-        return super().create(validated_data)
+        is_video = validated_data.get("type") == LearningMaterialType.VIDEO
+        if is_video:
+            validated_data["video_status"] = VideoProcessingStatus.UPLOADED
+        material = super().create(validated_data)
+        if is_video:
+            VideoProcessingService().process(material)
+        return material
 
     def update(self, instance, validated_data):
         uploaded_file = validated_data.get("file")
@@ -572,7 +589,19 @@ class LearningMaterialSerializer(serializers.ModelSerializer):
                 size=None,
                 extension="",
             )
-        return super().update(instance, validated_data)
+        should_process_video = material_type == LearningMaterialType.VIDEO and (
+            uploaded_file is not None or instance.type != material_type
+        )
+        if should_process_video:
+            validated_data["video_status"] = VideoProcessingStatus.UPLOADED
+            validated_data["duration_seconds"] = None
+        elif material_type != LearningMaterialType.VIDEO:
+            validated_data["video_status"] = ""
+            validated_data["duration_seconds"] = None
+        material = super().update(instance, validated_data)
+        if should_process_video:
+            VideoProcessingService().process(material)
+        return material
 
 
 class CourseMaterialFilterSerializer(serializers.Serializer):

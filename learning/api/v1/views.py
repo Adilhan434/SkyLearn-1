@@ -14,8 +14,10 @@ from learning.models import (
     CourseModule,
     CourseTopic,
     LearningMaterial,
+    LearningMaterialType,
     Lesson,
     ReleaseType,
+    VideoProcessingStatus,
 )
 from learning.permissions import (
     MaterialPermission,
@@ -59,9 +61,7 @@ def course_structure_queryset():
     modules = CourseModule.objects.order_by("order", "id").prefetch_related(
         Prefetch("topics", queryset=topics)
     )
-    return Course.objects.prefetch_related(
-        Prefetch("modules", queryset=modules)
-    )
+    return Course.objects.prefetch_related(Prefetch("modules", queryset=modules))
 
 
 class CourseStructureView(generics.RetrieveAPIView):
@@ -112,9 +112,11 @@ class CourseModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
         if instance.topics.exists() and not confirmation.validated_data["confirm"]:
             raise StructureNotEmpty()
         module_lessons = Lesson.objects.filter(topic__module=instance)
-        has_external_dependents = Lesson.objects.filter(
-            required_lesson__in=module_lessons
-        ).exclude(topic__module=instance).exists()
+        has_external_dependents = (
+            Lesson.objects.filter(required_lesson__in=module_lessons)
+            .exclude(topic__module=instance)
+            .exists()
+        )
         if has_external_dependents:
             raise StructureNotEmpty(
                 "Module lessons are prerequisites for lessons outside the module."
@@ -169,9 +171,11 @@ class CourseTopicDetailView(generics.RetrieveUpdateDestroyAPIView):
         if instance.lessons.exists() and not confirmation.validated_data["confirm"]:
             raise StructureNotEmpty()
         topic_lessons = Lesson.objects.filter(topic=instance)
-        has_external_dependents = Lesson.objects.filter(
-            required_lesson__in=topic_lessons
-        ).exclude(topic=instance).exists()
+        has_external_dependents = (
+            Lesson.objects.filter(required_lesson__in=topic_lessons)
+            .exclude(topic=instance)
+            .exists()
+        )
         if has_external_dependents:
             raise StructureNotEmpty(
                 "Topic lessons are prerequisites for lessons outside the topic."
@@ -274,9 +278,7 @@ class LessonMaterialListCreateView(generics.ListCreateAPIView):
     def get_lesson(self):
         lesson = get_object_or_404(
             Lesson.objects.select_related("topic__module__course").filter(
-                topic__module__course__in=courses_accessible_to(
-                    self.request.user
-                )
+                topic__module__course__in=courses_accessible_to(self.request.user)
             ),
             pk=self.kwargs["lesson_pk"],
         )
@@ -284,9 +286,7 @@ class LessonMaterialListCreateView(generics.ListCreateAPIView):
         return lesson
 
     def get_queryset(self):
-        return material_queryset_for(self.request.user).filter(
-            lesson=self.get_lesson()
-        )
+        return material_queryset_for(self.request.user).filter(lesson=self.get_lesson())
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -347,9 +347,7 @@ class CourseMaterialListView(generics.ListAPIView):
         if "lesson" in filters:
             queryset = queryset.filter(lesson_id=filters["lesson"])
         if "module" in filters:
-            queryset = queryset.filter(
-                lesson__topic__module_id=filters["module"]
-            )
+            queryset = queryset.filter(lesson__topic__module_id=filters["module"])
         return queryset
 
 
@@ -367,9 +365,7 @@ class MaterialDownloadNotAllowed(CodedAPIException):
 class LearningMaterialDownloadView(generics.GenericAPIView):
     permission_classes = (MaterialPermission,)
 
-    @extend_schema(
-        responses={(200, "application/octet-stream"): OpenApiTypes.BINARY}
-    )
+    @extend_schema(responses={(200, "application/octet-stream"): OpenApiTypes.BINARY})
     def get(self, request, *args, **kwargs):
         del args, kwargs
         material = get_object_or_404(
@@ -386,4 +382,34 @@ class LearningMaterialDownloadView(generics.GenericAPIView):
             as_attachment=True,
             filename=material.original_filename or material.file.name,
             content_type=material.mime_type or "application/octet-stream",
+        )
+
+
+class VideoNotReady(CodedAPIException):
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "video_not_ready"
+    default_detail = "Video is not ready for playback."
+
+
+class LearningMaterialPlaybackView(generics.GenericAPIView):
+    permission_classes = (MaterialPermission,)
+
+    @extend_schema(responses={(200, "video/*"): OpenApiTypes.BINARY})
+    def get(self, request, *args, **kwargs):
+        del args, kwargs
+        material = get_object_or_404(
+            material_queryset_for(request.user),
+            pk=self.kwargs["pk"],
+            type=LearningMaterialType.VIDEO,
+        )
+        self.check_object_permissions(request, material)
+        if material.video_status != VideoProcessingStatus.READY:
+            raise VideoNotReady()
+        if not material.file:
+            raise MaterialFileUnavailable()
+        return FileResponse(
+            material.file.open("rb"),
+            as_attachment=False,
+            filename=material.original_filename or material.file.name,
+            content_type=material.mime_type or "video/mp4",
         )

@@ -55,10 +55,11 @@ class LearningMaterialAdmin(AuditAdminMixin, admin.ModelAdmin):
         "course",
         "lesson",
         "type",
+        "video_status",
         "download_allowed",
         "created_at",
     )
-    list_filter = ("type", "download_allowed", "course")
+    list_filter = ("type", "video_status", "download_allowed", "course")
     search_fields = (
         "title",
         "description",

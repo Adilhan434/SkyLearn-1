@@ -24,6 +24,7 @@ from learning.models import (
     Lesson,
     LessonType,
     ReleaseType,
+    VideoProcessingStatus,
 )
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
@@ -324,6 +325,12 @@ class LearningStructureModelTests(TestCase):
                 "library_link",
                 "other",
             },
+        )
+
+    def test_supports_all_video_processing_statuses(self):
+        self.assertEqual(
+            {value for value, _label in VideoProcessingStatus.choices},
+            {"uploaded", "processing", "ready", "failed"},
         )
 
     def test_material_course_must_match_lesson_course(self):

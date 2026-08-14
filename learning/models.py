@@ -37,6 +37,13 @@ class LearningMaterialType(models.TextChoices):
     OTHER = "other", "Other"
 
 
+class VideoProcessingStatus(models.TextChoices):
+    UPLOADED = "uploaded", "Uploaded"
+    PROCESSING = "processing", "Processing"
+    READY = "ready", "Ready"
+    FAILED = "failed", "Failed"
+
+
 class CourseModule(AuditModel):
     course = models.ForeignKey(
         Course,
@@ -287,6 +294,12 @@ class LearningMaterial(AuditModel):
     size = models.PositiveBigIntegerField(blank=True, null=True)
     extension = models.CharField(max_length=20, blank=True)
     download_allowed = models.BooleanField(default=True)
+    video_status = models.CharField(
+        max_length=20,
+        choices=VideoProcessingStatus.choices,
+        blank=True,
+    )
+    duration_seconds = models.PositiveIntegerField(blank=True, null=True)
 
     class Meta:
         ordering = ("lesson", "id")

@@ -190,6 +190,7 @@ The versioned API is mounted in `api.v1.urls`:
 | `PATCH /api/v1/materials/{id}/` | Update material metadata or source | Materials-edit permission |
 | `DELETE /api/v1/materials/{id}/` | Delete a material record | Materials-delete permission |
 | `GET /api/v1/materials/{id}/download/` | Permission-checked file download | Materials-view permission and download policy |
+| `GET /api/v1/materials/{id}/playback/` | Stream a ready video from private storage | Materials-view permission and course access |
 | `GET /api/v1/courses/{id}/materials/` | Search and filter all course materials | Materials-view permission |
 | `POST /api/v1/courses/{id}/submit-review/` | Submit Draft/Needs Revision course | Submit-review permission |
 | `POST /api/v1/courses/{id}/return-for-revision/` | Return Under Review course with a comment | Review permission |
@@ -247,6 +248,17 @@ validation service rejects empty files, executable and deceptive double
 extensions, mismatched material types, invalid file signatures and conflicting
 declared MIME types. Trusted metadata is derived from validated bytes rather
 than accepted from the request.
+
+Video materials use the `VideoProcessingService` boundary so processing is not
+coupled to models or API views. The Release 1 implementation validates the
+upload, records `uploaded`, `processing`, `ready` or `failed`, and extracts an
+integer `duration_seconds` from MP4/MOV containers when their metadata is
+available. It currently serves the validated original file and does not
+transcode. A `playback_url` is returned only for a ready video and points to the
+permission-checked `GET /api/v1/materials/{id}/playback/` endpoint; raw storage
+URLs remain unavailable. The service interface can later be backed by an
+asynchronous transcoding worker without moving processing into model or view
+logic.
 
 ## 6. Database and runtime
 

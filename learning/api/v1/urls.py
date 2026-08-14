@@ -8,6 +8,7 @@ from .views import (
     LessonDetailView,
     LearningMaterialDetailView,
     LearningMaterialDownloadView,
+    LearningMaterialPlaybackView,
     LessonMaterialListCreateView,
 )
 
@@ -42,5 +43,10 @@ urlpatterns = [
         "materials/<int:pk>/download/",
         LearningMaterialDownloadView.as_view(),
         name="material-download",
+    ),
+    path(
+        "materials/<int:pk>/playback/",
+        LearningMaterialPlaybackView.as_view(),
+        name="material-playback",
     ),
 ]
