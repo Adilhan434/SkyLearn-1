@@ -34,6 +34,7 @@ jobs:
             accounts/permission_defaults.py \
             accounts/management/commands/seed_release1.py \
             audit \
+            calendar_events \
             config/database.py \
             courses \
             enrollments \

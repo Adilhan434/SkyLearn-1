@@ -52,7 +52,7 @@ jobs:
         run: >-
           python manage.py makemigrations
           accounts core attendance result finance
-          organization courses enrollments learning progress audit
+          organization courses enrollments learning progress audit calendar_events
           --check --dry-run
       - name: Apply migrations
         run: python manage.py migrate --noinput

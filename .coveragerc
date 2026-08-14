@@ -4,6 +4,7 @@ source =
     accounts.api.v1
     accounts.authentication
     audit
+    calendar_events
     courses
     enrollments
     learning
