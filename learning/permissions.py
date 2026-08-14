@@ -53,3 +53,31 @@ class StructureManagePermission(BasePermission):
             Course.objects.filter(pk=course.pk),
         ).exists()
         return has_access and can_edit_structure(request.user, course)
+
+
+class StructureObjectPermission(BasePermission):
+    """Allow structure reads and require manage permission for writes."""
+
+    message = "Course structure access is not allowed."
+
+    def has_permission(self, request, view):
+        user = request.user
+        permission_code = (
+            LMSPermissionCode.COURSE_STRUCTURE_VIEW
+            if request.method == "GET"
+            else LMSPermissionCode.COURSE_STRUCTURE_MANAGE
+        )
+        return bool(
+            has_course_management_role(user)
+            and user.has_lms_permission(permission_code)
+        )
+
+    def has_object_permission(self, request, view, obj):
+        course = structure_course_for(obj)
+        has_access = courses_accessible_to(
+            request.user,
+            Course.objects.filter(pk=course.pk),
+        ).exists()
+        if request.method == "GET":
+            return has_access
+        return has_access and can_edit_structure(request.user, course)

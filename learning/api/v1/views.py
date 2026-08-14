@@ -8,13 +8,17 @@ from api.v1.exceptions import CodedAPIException
 from courses.models import Course
 from courses.permissions import CourseAccessPermission, courses_accessible_to
 from learning.models import CourseModule, CourseTopic, Lesson, ReleaseType
-from learning.permissions import StructureManagePermission
+from learning.permissions import (
+    StructureManagePermission,
+    StructureObjectPermission,
+)
 
 from .serializers import (
     CourseModuleWriteSerializer,
     CourseStructureSerializer,
     CourseTopicWriteSerializer,
     DeleteConfirmationSerializer,
+    LessonWriteSerializer,
 )
 
 
@@ -22,6 +26,12 @@ class StructureNotEmpty(CodedAPIException):
     status_code = status.HTTP_409_CONFLICT
     error_code = "structure_not_empty"
     default_detail = "Structure contains nested objects. Confirm cascade deletion."
+
+
+class LessonIsRequired(CodedAPIException):
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "lesson_is_required"
+    default_detail = "Lesson is required by another lesson."
 
 
 def course_structure_queryset():
@@ -157,5 +167,51 @@ class CourseTopicDetailView(generics.RetrieveUpdateDestroyAPIView):
             release_type=ReleaseType.ALWAYS,
             release_at=None,
         )
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class LessonCreateView(generics.CreateAPIView):
+    permission_classes = (StructureManagePermission,)
+    serializer_class = LessonWriteSerializer
+
+    def get_topic(self):
+        accessible_courses = courses_accessible_to(self.request.user)
+        topic = get_object_or_404(
+            CourseTopic.objects.select_related(
+                "module",
+                "module__course",
+            ).filter(module__course__in=accessible_courses),
+            pk=self.kwargs["topic_pk"],
+        )
+        self.check_object_permissions(self.request, topic)
+        return topic
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["topic"] = self.get_topic()
+        return context
+
+
+class LessonDetailView(generics.RetrieveUpdateDestroyAPIView):
+    http_method_names = ("get", "patch", "delete", "head", "options")
+    permission_classes = (StructureObjectPermission,)
+    serializer_class = LessonWriteSerializer
+
+    def get_queryset(self):
+        accessible_courses = courses_accessible_to(self.request.user)
+        return Lesson.objects.select_related(
+            "topic",
+            "topic__module",
+            "topic__module__course",
+            "required_lesson",
+            "created_by",
+            "updated_by",
+        ).filter(topic__module__course__in=accessible_courses)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.dependent_lessons.exists():
+            raise LessonIsRequired()
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -170,6 +170,10 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/modules/{id}/topics/` | Append or explicitly order a topic | Structure-manage permission |
 | `PATCH /api/v1/topics/{id}/` | Update topic metadata and order | Structure-manage permission |
 | `DELETE /api/v1/topics/{id}/` | Safely delete a topic | Structure-manage permission |
+| `POST /api/v1/topics/{id}/lessons/` | Append or explicitly order a lesson | Structure-manage permission |
+| `GET /api/v1/lessons/{id}/` | Retrieve lesson metadata and content | Structure-view permission |
+| `PATCH /api/v1/lessons/{id}/` | Update lesson and release conditions | Structure-manage permission |
+| `DELETE /api/v1/lessons/{id}/` | Delete an unreferenced lesson | Structure-manage permission |
 | `POST /api/v1/courses/{id}/submit-review/` | Submit Draft/Needs Revision course | Submit-review permission |
 | `POST /api/v1/courses/{id}/return-for-revision/` | Return Under Review course with a comment | Review permission |
 | `POST /api/v1/courses/{id}/publish/` | Publish an Under Review course | Publish permission |
@@ -196,6 +200,10 @@ topics requires a JSON body of `{"confirm": true}`; otherwise the API returns
 the module's lessons is a prerequisite for a lesson outside that module.
 Topic deletion follows the same confirmation contract and rejects a cascade
 when one of its lessons is required by a lesson outside the topic.
+Lesson writes validate type, order, date releases and prerequisite ownership.
+Self-references, cross-course prerequisites and dependency cycles return a
+validation error. Deleting a prerequisite used by another lesson returns
+`409 lesson_is_required`.
 
 ## 6. Database and runtime
 

@@ -137,6 +137,20 @@ class CourseStructureAPITests(APITestCase):
             kwargs={"pk": topic.pk},
         )
 
+    @staticmethod
+    def lesson_create_url(topic):
+        return reverse(
+            "api-v1:learning-v1:lesson-create",
+            kwargs={"topic_pk": topic.pk},
+        )
+
+    @staticmethod
+    def lesson_detail_url(lesson):
+        return reverse(
+            "api-v1:learning-v1:lesson-detail",
+            kwargs={"pk": lesson.pk},
+        )
+
     def test_structure_requires_authentication(self):
         response = self.client.get(self.url)
 
@@ -680,3 +694,269 @@ class CourseStructureAPITests(APITestCase):
         response = self.client.get(self.topic_detail_url(topic))
 
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_manager_can_create_and_retrieve_lesson(self):
+        topic = CourseTopic.objects.create(
+            module=CourseModule.objects.create(
+                course=self.course,
+                title="Lesson Parent Module",
+                order=1,
+            ),
+            title="Lesson Parent Topic",
+            order=1,
+        )
+        self.client.force_authenticate(self.manager)
+
+        create_response = self.client.post(
+            self.lesson_create_url(topic),
+            {
+                "title": "Video Lesson",
+                "description": "Lesson description",
+                "lesson_type": LessonType.VIDEO,
+                "content": "https://video.example/lesson",
+                "estimated_duration_minutes": 25,
+                "order": 1,
+            },
+            format="json",
+        )
+        lesson = Lesson.objects.get(pk=create_response.data["id"])
+        detail_response = self.client.get(self.lesson_detail_url(lesson))
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["topic"], topic.pk)
+        self.assertEqual(detail_response.data["lesson_type"], LessonType.VIDEO)
+        self.assertEqual(lesson.created_by, self.manager)
+        self.assertEqual(lesson.updated_by, self.manager)
+
+    def test_create_lesson_without_order_appends_to_topic(self):
+        structure = self.create_structure()
+        topic = structure["second_topic"]
+        Lesson.objects.create(topic=topic, title="First", order=1)
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.lesson_create_url(topic),
+            {"title": "Second"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["order"], 2)
+
+    def test_create_lesson_rejects_duplicate_order(self):
+        structure = self.create_structure()
+        topic = structure["second_topic"]
+        Lesson.objects.create(topic=topic, title="First", order=1)
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.lesson_create_url(topic),
+            {"title": "Duplicate", "order": 1},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("order", response.data["error"]["fields"])
+
+    def test_create_lesson_validates_types_and_release_fields(self):
+        structure = self.create_structure()
+        topic = structure["second_topic"]
+        self.client.force_authenticate(self.manager)
+
+        invalid_lesson_type = self.client.post(
+            self.lesson_create_url(topic),
+            {"title": "Invalid Type", "lesson_type": "quiz"},
+            format="json",
+        )
+        missing_date = self.client.post(
+            self.lesson_create_url(topic),
+            {"title": "Missing Date", "release_type": ReleaseType.DATE},
+            format="json",
+        )
+        missing_required = self.client.post(
+            self.lesson_create_url(topic),
+            {
+                "title": "Missing Required",
+                "release_type": ReleaseType.AFTER_LESSON,
+            },
+            format="json",
+        )
+
+        for response in (invalid_lesson_type, missing_date, missing_required):
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "lesson_type",
+            invalid_lesson_type.data["error"]["fields"],
+        )
+        self.assertIn("release_at", missing_date.data["error"]["fields"])
+        self.assertIn(
+            "required_lesson",
+            missing_required.data["error"]["fields"],
+        )
+
+    def test_after_lesson_release_accepts_same_course_prerequisite(self):
+        structure = self.create_structure()
+        topic = structure["second_topic"]
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.lesson_create_url(topic),
+            {
+                "title": "Dependent Lesson",
+                "release_type": ReleaseType.AFTER_LESSON,
+                "required_lesson": structure["first_lesson"].pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["required_lesson"],
+            structure["first_lesson"].pk,
+        )
+
+    def test_required_lesson_from_another_course_is_rejected(self):
+        structure = self.create_structure()
+        topic = structure["second_topic"]
+        other_course = Course.objects.create(
+            title="Foreign Prerequisite Course",
+            code="FOREIGN-LESSON-COURSE",
+            credits=self.course.credits,
+            semester=self.course.semester,
+            faculty=self.course.faculty,
+            department=self.course.department,
+            program=self.course.program,
+            start_date=self.course.start_date,
+            end_date=self.course.end_date,
+        )
+        other_module = CourseModule.objects.create(
+            course=other_course,
+            title="Foreign Module",
+            order=1,
+        )
+        other_topic = CourseTopic.objects.create(
+            module=other_module,
+            title="Foreign Topic",
+            order=1,
+        )
+        foreign_lesson = Lesson.objects.create(
+            topic=other_topic,
+            title="Foreign Lesson",
+            order=1,
+        )
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.lesson_create_url(topic),
+            {
+                "title": "Invalid Dependency",
+                "release_type": ReleaseType.AFTER_LESSON,
+                "required_lesson": foreign_lesson.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("required_lesson", response.data["error"]["fields"])
+
+    def test_patch_rejects_self_dependency_and_cycle(self):
+        structure = self.create_structure()
+        first = structure["first_lesson"]
+        second = structure["second_lesson"]
+        self.client.force_authenticate(self.manager)
+
+        self_response = self.client.patch(
+            self.lesson_detail_url(first),
+            {
+                "release_type": ReleaseType.AFTER_LESSON,
+                "required_lesson": first.pk,
+            },
+            format="json",
+        )
+        cycle_response = self.client.patch(
+            self.lesson_detail_url(first),
+            {
+                "release_type": ReleaseType.AFTER_LESSON,
+                "required_lesson": second.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(self_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(cycle_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("required_lesson", self_response.data["error"]["fields"])
+        self.assertIn("required_lesson", cycle_response.data["error"]["fields"])
+
+    def test_assigned_teacher_can_get_and_patch_lesson(self):
+        structure = self.create_structure()
+        lesson = structure["first_lesson"]
+        self.client.force_authenticate(self.teacher)
+
+        detail_response = self.client.get(self.lesson_detail_url(lesson))
+        patch_response = self.client.patch(
+            self.lesson_detail_url(lesson),
+            {"title": "Teacher Updated Lesson"},
+            format="json",
+        )
+
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
+        lesson.refresh_from_db()
+        self.assertEqual(lesson.title, "Teacher Updated Lesson")
+        self.assertEqual(lesson.updated_by, self.teacher)
+
+    def test_unassigned_teacher_cannot_get_lesson(self):
+        lesson = self.create_structure()["first_lesson"]
+        teacher = get_user_model().objects.create_user(
+            username="foreign-lesson-teacher"
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(teacher)
+
+        response = self.client.get(self.lesson_detail_url(lesson))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_archived_course_lesson_cannot_be_created_or_patched(self):
+        structure = self.create_structure()
+        topic = structure["second_topic"]
+        lesson = structure["first_lesson"]
+        self.course.status = "archived"
+        self.course.save(update_fields=("status",))
+        self.client.force_authenticate(self.manager)
+
+        create_response = self.client.post(
+            self.lesson_create_url(topic),
+            {"title": "Forbidden Lesson"},
+            format="json",
+        )
+        patch_response = self.client.patch(
+            self.lesson_detail_url(lesson),
+            {"title": "Forbidden update"},
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(patch_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_leaf_lesson_can_be_deleted(self):
+        structure = self.create_structure()
+        lesson = structure["second_lesson"]
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.delete(self.lesson_detail_url(lesson))
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Lesson.objects.filter(pk=lesson.pk).exists())
+
+    def test_required_lesson_cannot_be_deleted(self):
+        structure = self.create_structure()
+        lesson = structure["first_lesson"]
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.delete(self.lesson_detail_url(lesson))
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["error"]["code"], "lesson_is_required")
+        self.assertTrue(Lesson.objects.filter(pk=lesson.pk).exists())

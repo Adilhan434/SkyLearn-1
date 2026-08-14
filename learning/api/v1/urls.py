@@ -4,6 +4,8 @@ from .views import (
     CourseModuleDetailView,
     CourseTopicCreateView,
     CourseTopicDetailView,
+    LessonCreateView,
+    LessonDetailView,
 )
 
 
@@ -17,4 +19,10 @@ urlpatterns = [
         name="topic-create",
     ),
     path("topics/<int:pk>/", CourseTopicDetailView.as_view(), name="topic-detail"),
+    path(
+        "topics/<int:topic_pk>/lessons/",
+        LessonCreateView.as_view(),
+        name="lesson-create",
+    ),
+    path("lessons/<int:pk>/", LessonDetailView.as_view(), name="lesson-detail"),
 ]
