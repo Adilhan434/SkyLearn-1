@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.db import transaction
 from django.db.models import Prefetch
 from django.utils import timezone
@@ -81,6 +83,27 @@ def calculate_course_progress(course, completed_lesson_ids=()):
         "completed_lessons": completed_lessons,
         "progress_percent": progress_percent,
     }
+
+
+def _student_progress_context(student):
+    courses = list(_student_course_queryset(student).order_by("code"))
+    progress_items = list(
+        LessonProgress.objects.filter(
+            student=student,
+            lesson__topic__module__course__in=courses,
+        )
+        .select_related("lesson__topic__module__course")
+        .order_by("-updated_at", "-id")
+    )
+    completed_by_course = defaultdict(set)
+    for item in progress_items:
+        if item.status == LessonProgressStatus.COMPLETED:
+            completed_by_course[item.lesson.course.pk].add(item.lesson_id)
+    summaries = [
+        calculate_course_progress(course, completed_by_course[course.pk])
+        for course in courses
+    ]
+    return courses, progress_items, completed_by_course, summaries
 
 
 class LessonProgressService:
@@ -225,19 +248,94 @@ class CourseProgressService:
 
     @classmethod
     def student_summary(cls, *, student):
-        courses = [
-            cls._summary(student, course)
-            for course in _student_course_queryset(student).order_by("code")
-        ]
-        total_lessons = sum(item["total_lessons"] for item in courses)
-        completed_lessons = sum(item["completed_lessons"] for item in courses)
+        _, _, _, summaries = _student_progress_context(student)
+        total_lessons = sum(item["total_lessons"] for item in summaries)
+        completed_lessons = sum(item["completed_lessons"] for item in summaries)
         progress_percent = (
             round(completed_lessons / total_lessons * 100) if total_lessons else 0
         )
         return {
-            "total_courses": len(courses),
+            "total_courses": len(summaries),
             "total_lessons": total_lessons,
             "completed_lessons": completed_lessons,
             "progress_percent": progress_percent,
-            "courses": courses,
+            "courses": summaries,
+        }
+
+
+class StudentDashboardService:
+    @staticmethod
+    def _continue_learning(courses, progress_items, completed_by_course):
+        course_by_id = {course.pk: course for course in courses}
+        available_by_course = {
+            course.pk: {
+                lesson.pk
+                for lesson in _course_lessons(course)
+                if evaluate_lesson_availability(
+                    lesson,
+                    completed_lesson_ids=completed_by_course[course.pk],
+                ).is_available
+            }
+            for course in courses
+        }
+        for item in progress_items:
+            course_id = item.lesson.course.pk
+            if (
+                item.status == LessonProgressStatus.IN_PROGRESS
+                and item.lesson_id in available_by_course.get(course_id, set())
+            ):
+                course = course_by_id[course_id]
+                return {
+                    "course_id": course.pk,
+                    "course_title": course.title,
+                    "lesson_id": item.lesson_id,
+                    "lesson_title": item.lesson.title,
+                    "status": item.status,
+                }
+        for course in courses:
+            completed_ids = completed_by_course[course.pk]
+            available_ids = available_by_course[course.pk]
+            for lesson in _course_lessons(course):
+                if lesson.pk in available_ids and lesson.pk not in completed_ids:
+                    return {
+                        "course_id": course.pk,
+                        "course_title": course.title,
+                        "lesson_id": lesson.pk,
+                        "lesson_title": lesson.title,
+                        "status": LessonProgressStatus.NOT_STARTED,
+                    }
+        return {}
+
+    @classmethod
+    def build(cls, *, student):
+        (
+            courses,
+            progress_items,
+            completed_by_course,
+            summaries,
+        ) = _student_progress_context(student)
+        total_lessons = sum(item["total_lessons"] for item in summaries)
+        completed_lessons = sum(item["completed_lessons"] for item in summaries)
+        overall_progress = (
+            round(completed_lessons / total_lessons * 100) if total_lessons else 0
+        )
+        course_data = [
+            {
+                **summary,
+                "title": course.title,
+                "code": course.code,
+            }
+            for course, summary in zip(courses, summaries)
+        ]
+        return {
+            "active_courses": len(courses),
+            "completed_lessons": completed_lessons,
+            "overall_progress": overall_progress,
+            "continue_learning": cls._continue_learning(
+                courses,
+                progress_items,
+                completed_by_course,
+            ),
+            "courses": course_data,
+            "upcoming_events": [],
         }

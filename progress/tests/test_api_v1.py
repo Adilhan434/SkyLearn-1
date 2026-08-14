@@ -96,6 +96,10 @@ class ProgressAPITests(APITestCase):
     def student_progress_url():
         return reverse("api-v1:progress-v1:student-progress")
 
+    @staticmethod
+    def dashboard_url():
+        return reverse("api-v1:progress-v1:student-dashboard")
+
     def test_progress_routes_match_frontend_contract(self):
         self.assertEqual(
             self.lesson_url("start", self.first_lesson),
@@ -106,6 +110,7 @@ class ProgressAPITests(APITestCase):
             f"/api/v1/student/lessons/{self.first_lesson.pk}/complete/",
         )
         self.assertEqual(self.student_progress_url(), "/api/v1/student/progress/")
+        self.assertEqual(self.dashboard_url(), "/api/v1/student/dashboard/")
         self.assertEqual(
             self.course_progress_url(),
             f"/api/v1/student/courses/{self.course.pk}/progress/",
@@ -397,8 +402,81 @@ class ProgressAPITests(APITestCase):
         self.assertEqual(response.data["progress_percent"], 50)
         self.assertEqual(response.data["courses"][0]["course_id"], self.course.pk)
 
+    def test_dashboard_returns_release1_frontend_contract(self):
+        self.client.force_authenticate(self.student)
+
+        initial = self.client.get(self.dashboard_url())
+        self.client.post(self.lesson_url("complete", self.first_lesson))
+        partial = self.client.get(self.dashboard_url())
+        self.client.post(self.lesson_url("complete", self.second_lesson))
+        completed = self.client.get(self.dashboard_url())
+
+        self.assertEqual(
+            set(initial.data),
+            {
+                "active_courses",
+                "completed_lessons",
+                "overall_progress",
+                "continue_learning",
+                "courses",
+                "upcoming_events",
+            },
+        )
+        self.assertEqual(initial.data["active_courses"], 1)
+        self.assertEqual(initial.data["completed_lessons"], 0)
+        self.assertEqual(initial.data["overall_progress"], 0)
+        self.assertEqual(
+            initial.data["continue_learning"]["lesson_id"], self.first_lesson.pk
+        )
+        self.assertEqual(initial.data["continue_learning"]["status"], "not_started")
+        self.assertEqual(initial.data["courses"][0]["code"], self.course.code)
+        self.assertEqual(initial.data["upcoming_events"], [])
+        self.assertEqual(partial.data["completed_lessons"], 1)
+        self.assertEqual(partial.data["overall_progress"], 50)
+        self.assertEqual(
+            partial.data["continue_learning"]["lesson_id"], self.second_lesson.pk
+        )
+        self.assertEqual(completed.data["overall_progress"], 100)
+        self.assertEqual(completed.data["continue_learning"], {})
+
+    def test_dashboard_prefers_latest_in_progress_lesson(self):
+        third_lesson = Lesson.objects.create(
+            topic=self.first_lesson.topic,
+            title="Third lesson",
+            order=3,
+            is_published=True,
+        )
+        self.client.force_authenticate(self.student)
+        self.client.post(self.lesson_url("start", self.first_lesson))
+        self.client.post(self.lesson_url("start", third_lesson))
+
+        response = self.client.get(self.dashboard_url())
+
+        self.assertEqual(
+            response.data["continue_learning"]["lesson_id"],
+            third_lesson.pk,
+        )
+        self.assertEqual(
+            response.data["continue_learning"]["status"],
+            LessonProgressStatus.IN_PROGRESS,
+        )
+
+    def test_dashboard_for_student_without_courses_is_empty(self):
+        self.client.force_authenticate(self.other_student)
+
+        response = self.client.get(self.dashboard_url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["active_courses"], 0)
+        self.assertEqual(response.data["completed_lessons"], 0)
+        self.assertEqual(response.data["overall_progress"], 0)
+        self.assertEqual(response.data["continue_learning"], {})
+        self.assertEqual(response.data["courses"], [])
+        self.assertEqual(response.data["upcoming_events"], [])
+
     def test_progress_endpoints_enforce_student_access(self):
         anonymous = self.client.get(self.student_progress_url())
+        anonymous_dashboard = self.client.get(self.dashboard_url())
         self.client.force_authenticate(self.non_student)
         forbidden = self.client.get(self.student_progress_url())
         self.client.force_authenticate(self.other_student)
@@ -406,6 +484,10 @@ class ProgressAPITests(APITestCase):
         hidden_lesson = self.client.post(self.lesson_url("start", self.first_lesson))
 
         self.assertEqual(anonymous.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(
+            anonymous_dashboard.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
         self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(hidden_course.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(hidden_lesson.status_code, status.HTTP_404_NOT_FOUND)

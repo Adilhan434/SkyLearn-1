@@ -33,3 +33,25 @@ class StudentProgressSerializer(serializers.Serializer):
     completed_lessons = serializers.IntegerField(min_value=0)
     progress_percent = serializers.IntegerField(min_value=0, max_value=100)
     courses = CourseProgressSerializer(many=True)
+
+
+class DashboardCourseSerializer(CourseProgressSerializer):
+    title = serializers.CharField()
+    code = serializers.CharField()
+
+
+class ContinueLearningSerializer(serializers.Serializer):
+    course_id = serializers.IntegerField(required=False)
+    course_title = serializers.CharField(required=False)
+    lesson_id = serializers.IntegerField(required=False)
+    lesson_title = serializers.CharField(required=False)
+    status = serializers.CharField(required=False)
+
+
+class StudentDashboardSerializer(serializers.Serializer):
+    active_courses = serializers.IntegerField(min_value=0)
+    completed_lessons = serializers.IntegerField(min_value=0)
+    overall_progress = serializers.IntegerField(min_value=0, max_value=100)
+    continue_learning = ContinueLearningSerializer()
+    courses = DashboardCourseSerializer(many=True)
+    upcoming_events = serializers.ListField(child=serializers.DictField())

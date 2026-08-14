@@ -195,6 +195,12 @@ unpublished lessons are excluded. The same calculation and progress records
 drive `overall_progress`, lesson `status` and availability in Student Course
 Detail, so the frontend does not need to reconcile competing data sources.
 
+`GET /api/v1/student/dashboard/` combines those summaries into the Release 1
+dashboard contract. `continue_learning` prefers the most recently updated
+available In Progress lesson and otherwise selects the first available
+unfinished lesson. It is an empty object when there is nothing to continue.
+`upcoming_events` remains an empty list until the Calendar domain is introduced.
+
 ### SIS enrollment integration
 
 `SISIntegrationService` is the transport-independent integration boundary for
@@ -280,6 +286,7 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/student/lessons/{id}/complete/` | Idempotently complete an available lesson | Student role and active enrollment |
 | `GET /api/v1/student/progress/` | Aggregate operational progress for the Student | Student role and active enrollments |
 | `GET /api/v1/student/courses/{id}/progress/` | Operational progress for one enrolled course | Student role and active enrollment |
+| `GET /api/v1/student/dashboard/` | Release 1 course, progress and continue-learning summary | Student role |
 | `POST /api/v1/integrations/sis/enrollments/sync/` | Idempotently apply an SIS enroll/withdraw event | Enrollment-manage permission |
 | `GET, POST /api/v1/course-templates/` | List active templates or snapshot an accessible course | Copy permission |
 | `GET /api/v1/course-templates/{id}/` | Retrieve active template metadata | Copy permission |

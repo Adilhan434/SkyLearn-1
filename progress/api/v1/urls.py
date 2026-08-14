@@ -2,6 +2,7 @@ from django.urls import path
 
 from progress.api.v1.views import (
     StudentCourseProgressView,
+    StudentDashboardView,
     StudentLessonCompleteView,
     StudentLessonStartView,
     StudentProgressView,
@@ -11,6 +12,7 @@ from progress.api.v1.views import (
 app_name = "progress-v1"
 
 urlpatterns = [
+    path("dashboard/", StudentDashboardView.as_view(), name="student-dashboard"),
     path("progress/", StudentProgressView.as_view(), name="student-progress"),
     path(
         "courses/<int:pk>/progress/",

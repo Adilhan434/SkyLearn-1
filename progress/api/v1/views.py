@@ -7,9 +7,14 @@ from enrollments.permissions import StudentCoursePermission
 from progress.api.v1.serializers import (
     CourseProgressSerializer,
     LessonProgressSerializer,
+    StudentDashboardSerializer,
     StudentProgressSerializer,
 )
-from progress.services import CourseProgressService, LessonProgressService
+from progress.services import (
+    CourseProgressService,
+    LessonProgressService,
+    StudentDashboardService,
+)
 
 
 class StudentLessonStartView(APIView):
@@ -67,3 +72,12 @@ class StudentCourseProgressView(APIView):
             course_id=pk,
         )
         return Response(CourseProgressSerializer(summary).data)
+
+
+class StudentDashboardView(APIView):
+    permission_classes = (StudentCoursePermission,)
+
+    @extend_schema(responses={200: StudentDashboardSerializer})
+    def get(self, request):
+        dashboard = StudentDashboardService.build(student=request.user)
+        return Response(StudentDashboardSerializer(dashboard).data)
