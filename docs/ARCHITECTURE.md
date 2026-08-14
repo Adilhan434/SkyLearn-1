@@ -25,7 +25,7 @@ integration task requires it.
 | `courses` | Course metadata, lifecycle, copying, templates and management API | Active |
 | `enrollments` | Student-to-course membership and enrollment lifecycle | Active model; API deferred |
 | `learning` | Ordered course modules, topics, lessons and release conditions | Active models, Admin and structure management API |
-| `progress` | Future student progress and completion state | Reserved; no models yet |
+| `progress` | Minimal operational lesson progress and completion state | Active model and Admin; API follows separately |
 
 The project follows its existing top-level Django app layout. The new apps are
 therefore located beside `accounts`, `core`, `attendance`, `finance` and
@@ -179,8 +179,8 @@ exclude review, publication-owner and audit fields. Nested structure, lesson
 availability and safe material metadata are included in Student Course Detail.
 Only published lessons are exposed. Each lesson contains `status`,
 `is_available` and `lock_reason`; release checks use the prefetched hierarchy
-without per-lesson queries. Until `LessonProgress` is introduced by its
-dedicated task, statuses are `not_started` and `overall_progress` is `0`.
+without per-lesson queries. `LessonProgress` now stores operational lesson
+state; wiring it into these responses is handled by the following API tasks.
 Protected material download and video playback accept an enrolled Student but
 continue to reject users without an Active enrollment in the Published course.
 
@@ -307,7 +307,7 @@ Student lesson availability is calculated centrally by
 module and lesson dates, previous-module completion, previous-lesson completion
 and explicit lesson prerequisites, and returns `is_available` plus a stable
 `lock_reason`. The caller supplies completed lesson IDs; the Student Course API
-will source them from `LessonProgress` when the progress domain is introduced.
+will source them from `LessonProgress` when the progress API is introduced.
 
 Material responses expose metadata, an external URL where applicable and a
 protected `download_url`; the underlying storage path is write-only. Course

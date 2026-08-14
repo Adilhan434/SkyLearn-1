@@ -21,14 +21,13 @@ class LMSAppStructureTests(SimpleTestCase):
     def test_legacy_core_app_remains_registered(self):
         self.assertTrue(apps.is_installed("core"))
 
-    def test_domain_boundaries_do_not_add_models_prematurely(self):
-        reserved_apps = ("progress",)
-        for app_label in reserved_apps:
-            with self.subTest(app=app_label):
-                self.assertEqual(
-                    list(apps.get_app_config(app_label).get_models()),
-                    [],
-                )
+    def test_progress_contains_release1_progress_model(self):
+        model_names = {
+            model.__name__
+            for model in apps.get_app_config("progress").get_models()
+        }
+
+        self.assertEqual(model_names, {"LessonProgress"})
 
     def test_enrollments_contains_release1_enrollment_model(self):
         model_names = {
