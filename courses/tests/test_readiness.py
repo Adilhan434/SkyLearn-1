@@ -12,6 +12,7 @@ from courses.models import (
     CourseTeachingAssignment,
     CourseTeachingRole,
 )
+from learning.models import CourseModule, CourseTopic, Lesson
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
@@ -63,6 +64,21 @@ class CourseReadinessAPITests(APITestCase):
             created_by=self.manager,
             updated_by=self.manager,
         )
+        self.module = CourseModule.objects.create(
+            course=self.course,
+            title="Readiness Module",
+            order=1,
+        )
+        self.topic = CourseTopic.objects.create(
+            module=self.module,
+            title="Readiness Topic",
+            order=1,
+        )
+        self.lesson = Lesson.objects.create(
+            topic=self.topic,
+            title="Readiness Lesson",
+            order=1,
+        )
         self.url = reverse(
             "api-v1:courses-v1:readiness",
             kwargs={"pk": self.course.pk},
@@ -83,12 +99,13 @@ class CourseReadinessAPITests(APITestCase):
             set(response.data),
             {"score", "ready_for_review", "checks"},
         )
-        self.assertEqual(response.data["score"], 80)
+        self.assertEqual(response.data["score"], 90)
         self.assertTrue(response.data["ready_for_review"])
         checks = {check["key"]: check for check in response.data["checks"]}
         self.assertEqual(checks["metadata"]["status"], "complete")
         self.assertEqual(checks["teacher"]["status"], "complete")
         self.assertEqual(checks["syllabus"]["status"], "warning")
+        self.assertEqual(checks["structure"]["status"], "complete")
 
     def test_syllabus_increases_readiness_score(self):
         self.course.syllabus = "courses/syllabi/ready-course.pdf"
@@ -111,7 +128,7 @@ class CourseReadinessAPITests(APITestCase):
 
         response = self.client.get(self.url)
 
-        self.assertEqual(response.data["score"], 50)
+        self.assertEqual(response.data["score"], 70)
         self.assertFalse(response.data["ready_for_review"])
         teacher_check = next(
             check
@@ -119,6 +136,49 @@ class CourseReadinessAPITests(APITestCase):
             if check["key"] == "teacher"
         )
         self.assertEqual(teacher_check["status"], "error")
+
+    def test_missing_structure_blocks_review(self):
+        self.module.delete()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(self.url)
+
+        self.assertFalse(response.data["ready_for_review"])
+        structure_check = next(
+            check
+            for check in response.data["checks"]
+            if check["key"] == "structure"
+        )
+        self.assertEqual(structure_check["status"], "error")
+        self.assertEqual(structure_check["message"], "Course has no modules.")
+
+    def test_topic_without_lessons_blocks_review(self):
+        self.lesson.delete()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(self.url)
+
+        self.assertFalse(response.data["ready_for_review"])
+        structure_check = next(
+            check
+            for check in response.data["checks"]
+            if check["key"] == "structure"
+        )
+        self.assertIn("topic 1 has no lessons", structure_check["message"])
+
+    def test_module_without_topics_blocks_review(self):
+        self.topic.delete()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(self.url)
+
+        self.assertFalse(response.data["ready_for_review"])
+        structure_check = next(
+            check
+            for check in response.data["checks"]
+            if check["key"] == "structure"
+        )
+        self.assertIn("Module 1 has no topics.", structure_check["message"])
 
     def test_inactive_organization_blocks_readiness_and_submit(self):
         self.faculty.is_active = False

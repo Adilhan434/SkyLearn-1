@@ -51,10 +51,10 @@ def _metadata_check(course):
         return ReadinessCheck(
             key="metadata",
             status="error",
-            weight=50,
+            weight=40,
             message=" ".join(errors),
         )
-    return ReadinessCheck(key="metadata", status="complete", weight=50)
+    return ReadinessCheck(key="metadata", status="complete", weight=40)
 
 
 def _teacher_check(course):
@@ -67,10 +67,10 @@ def _teacher_check(course):
         return ReadinessCheck(
             key="teacher",
             status="error",
-            weight=30,
+            weight=20,
             message="Course has no active primary teacher.",
         )
-    return ReadinessCheck(key="teacher", status="complete", weight=30)
+    return ReadinessCheck(key="teacher", status="complete", weight=20)
 
 
 def _syllabus_check(course):
@@ -78,16 +78,40 @@ def _syllabus_check(course):
         return ReadinessCheck(
             key="syllabus",
             status="warning",
-            weight=20,
+            weight=10,
             message="Course has no syllabus.",
             blocking=False,
         )
     return ReadinessCheck(
         key="syllabus",
         status="complete",
-        weight=20,
+        weight=10,
         blocking=False,
     )
+
+
+def _structure_check(course):
+    modules = list(course.modules.prefetch_related("topics__lessons"))
+    errors = []
+    if not modules:
+        errors.append("Course has no modules.")
+    for module in modules:
+        topics = list(module.topics.all())
+        if not topics:
+            errors.append(f"Module {module.order} has no topics.")
+        for topic in topics:
+            if not topic.lessons.exists():
+                errors.append(
+                    f"Module {module.order}, topic {topic.order} has no lessons."
+                )
+    if errors:
+        return ReadinessCheck(
+            key="structure",
+            status="error",
+            weight=30,
+            message=" ".join(errors),
+        )
+    return ReadinessCheck(key="structure", status="complete", weight=30)
 
 
 def evaluate_course_readiness(course):
@@ -95,6 +119,7 @@ def evaluate_course_readiness(course):
         _metadata_check(course),
         _teacher_check(course),
         _syllabus_check(course),
+        _structure_check(course),
     )
     score = sum(check.weight for check in checks if check.status == "complete")
     ready_for_review = not any(

@@ -14,6 +14,7 @@ from courses.models import (
     CourseTeachingAssignment,
     CourseTeachingRole,
 )
+from learning.models import CourseModule, CourseTopic, Lesson
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
@@ -64,6 +65,21 @@ class CourseLifecycleAPITests(APITestCase):
             is_primary=True,
             created_by=self.manager,
             updated_by=self.manager,
+        )
+        module = CourseModule.objects.create(
+            course=self.course,
+            title="Lifecycle Module",
+            order=1,
+        )
+        topic = CourseTopic.objects.create(
+            module=module,
+            title="Lifecycle Topic",
+            order=1,
+        )
+        Lesson.objects.create(
+            topic=topic,
+            title="Lifecycle Lesson",
+            order=1,
         )
 
     def action_url(self, action):

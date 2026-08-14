@@ -24,7 +24,7 @@ integration task requires it.
 | `organization` | Faculties, departments, academic programs, student groups and semesters | Active models and Admin; API deferred |
 | `courses` | Release 1 course metadata and Course list/create/detail API | Active |
 | `enrollments` | Future enrollment ownership and lifecycle | Reserved; no models yet |
-| `learning` | Future modules, topics, lessons and learning objects | Reserved; no models yet |
+| `learning` | Ordered course modules, topics, lessons and release conditions | Active models and Admin; API pending |
 | `progress` | Future student progress and completion state | Reserved; no models yet |
 
 The project follows its existing top-level Django app layout. The new apps are
@@ -117,8 +117,19 @@ Lifecycle transitions are atomic, permission-controlled operations and create
 immutable `CourseStatusHistory` records. Publication stores `published_at` and
 `published_by`; a return for revision preserves the reviewer comment.
 
-Quiz, Gradebook, Assignment, Module, Topic, Lesson and Learning Object are not
-part of this model or the current task.
+Quiz, Gradebook and Assignment are outside Release 1. Course structure is
+owned separately by the `learning` app rather than being embedded in Course.
+
+### Learning structure
+
+`learning` owns the ordered hierarchy `Course -> CourseModule -> CourseTopic
+-> Lesson`. The database enforces unique positive order values within each
+parent. Modules support `always`, `after_previous` and `date` release modes.
+Lessons add `after_lesson`, with validation that prevents self-references,
+cross-course prerequisites and dependency cycles. Prerequisite lessons use
+`PROTECT`; the normal Course-to-Lesson hierarchy uses cascade deletion. All
+three models inherit the shared audit fields and are registered in Django
+Admin.
 
 ## 4. Organization and Course relationships
 
@@ -165,12 +176,12 @@ Course list filtering supports `status`, `semester`, `faculty`, `department`,
 `title`, `code`, `created_at`, `updated_at`, `start_date`, `end_date` and
 `status`; `page` and `page_size` control pagination.
 
-Course readiness currently evaluates required metadata, active Organization
-relations, an active primary teacher and the optional syllabus. Metadata and
-teacher failures block review submission; a missing syllabus is reported as a
-warning and lowers the score without blocking submission. Structure and
-lesson-material checks are added to the same readiness service when those
-Release 1 models become available.
+Course readiness evaluates required metadata, active Organization relations,
+an active primary teacher, the optional syllabus and a minimum structure of
+Module, Topic and Lesson. Metadata, teacher and structure failures block
+review submission; a missing syllabus is reported as a warning and lowers the
+score without blocking submission. Lesson-material checks are added to the
+same service when learning materials become available.
 
 ## 6. Database and runtime
 

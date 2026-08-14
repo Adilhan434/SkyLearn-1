@@ -22,10 +22,21 @@ class LMSAppStructureTests(SimpleTestCase):
         self.assertTrue(apps.is_installed("core"))
 
     def test_domain_boundaries_do_not_add_models_prematurely(self):
-        reserved_apps = ("enrollments", "learning", "progress")
+        reserved_apps = ("enrollments", "progress")
         for app_label in reserved_apps:
             with self.subTest(app=app_label):
                 self.assertEqual(
                     list(apps.get_app_config(app_label).get_models()),
                     [],
                 )
+
+    def test_learning_contains_only_release1_structure_models(self):
+        model_names = {
+            model.__name__
+            for model in apps.get_app_config("learning").get_models()
+        }
+
+        self.assertEqual(
+            model_names,
+            {"CourseModule", "CourseTopic", "Lesson"},
+        )
