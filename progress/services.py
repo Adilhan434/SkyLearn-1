@@ -113,13 +113,19 @@ class LessonProgressService:
             return progress, False
         cls._assert_available(student, lesson)
         if progress is None:
-            progress = LessonProgress.objects.create(
+            (
+                progress,
+                created,
+            ) = LessonProgress.objects.select_for_update().get_or_create(
                 student=student,
                 lesson=lesson,
-                status=LessonProgressStatus.IN_PROGRESS,
-                started_at=timezone.now(),
+                defaults={
+                    "status": LessonProgressStatus.IN_PROGRESS,
+                    "started_at": timezone.now(),
+                },
             )
-            return progress, True
+            if created:
+                return progress, True
         if progress.status == LessonProgressStatus.NOT_STARTED:
             progress.status = LessonProgressStatus.IN_PROGRESS
             progress.started_at = timezone.now()

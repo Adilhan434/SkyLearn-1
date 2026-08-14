@@ -2,6 +2,7 @@ from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -115,6 +116,40 @@ class ProgressAPITests(APITestCase):
         self.assertEqual(first.data["status"], LessonProgressStatus.IN_PROGRESS)
         self.assertEqual(first.data["started_at"], replay.data["started_at"])
         self.assertEqual(LessonProgress.objects.count(), 1)
+
+    def test_start_transitions_existing_not_started_record(self):
+        progress = LessonProgress.objects.create(
+            student=self.student,
+            lesson=self.first_lesson,
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.post(self.lesson_url("start", self.first_lesson))
+
+        progress.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(progress.status, LessonProgressStatus.IN_PROGRESS)
+        self.assertIsNotNone(progress.started_at)
+        self.assertIsNone(progress.completed_at)
+
+    def test_start_does_not_regress_completed_lesson(self):
+        completed_at = timezone.now()
+        progress = LessonProgress.objects.create(
+            student=self.student,
+            lesson=self.first_lesson,
+            status=LessonProgressStatus.COMPLETED,
+            started_at=completed_at,
+            completed_at=completed_at,
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.post(self.lesson_url("start", self.first_lesson))
+
+        progress.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(progress.status, LessonProgressStatus.COMPLETED)
+        self.assertEqual(progress.started_at, completed_at)
+        self.assertEqual(progress.completed_at, completed_at)
 
     def test_complete_is_idempotent_and_unlocks_required_lesson(self):
         self.client.force_authenticate(self.student)
