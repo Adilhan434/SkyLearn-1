@@ -24,7 +24,7 @@ integration task requires it.
 | `organization` | Faculties, departments, academic programs, student groups and semesters | Active models and Admin; API deferred |
 | `courses` | Release 1 course metadata and Course list/create/detail API | Active |
 | `enrollments` | Future enrollment ownership and lifecycle | Reserved; no models yet |
-| `learning` | Ordered course modules, topics, lessons and release conditions | Active models and Admin; API pending |
+| `learning` | Ordered course modules, topics, lessons and release conditions | Active models, Admin and read API |
 | `progress` | Future student progress and completion state | Reserved; no models yet |
 
 The project follows its existing top-level Django app layout. The new apps are
@@ -163,6 +163,7 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/` | Create a course | Staff/admin |
 | `GET /api/v1/courses/{id}/` | Retrieve course metadata | Authenticated |
 | `GET /api/v1/courses/{id}/readiness/` | Course readiness score and checks | Course view permission |
+| `GET /api/v1/courses/{id}/structure/` | Nested Module, Topic and Lesson structure | Course view permission |
 | `POST /api/v1/courses/{id}/submit-review/` | Submit Draft/Needs Revision course | Submit-review permission |
 | `POST /api/v1/courses/{id}/return-for-revision/` | Return Under Review course with a comment | Review permission |
 | `POST /api/v1/courses/{id}/publish/` | Publish an Under Review course | Publish permission |

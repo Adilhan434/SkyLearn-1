@@ -1,5 +1,7 @@
 from django.urls import path
 
+from learning.api.v1.views import CourseStructureView
+
 from .views import (
     ArchiveCourseView,
     CourseDetailView,
@@ -21,6 +23,11 @@ urlpatterns = [
         "<int:pk>/readiness/",
         CourseReadinessView.as_view(),
         name="readiness",
+    ),
+    path(
+        "<int:pk>/structure/",
+        CourseStructureView.as_view(),
+        name="structure",
     ),
     path(
         "<int:pk>/submit-review/",
