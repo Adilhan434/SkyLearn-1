@@ -16,7 +16,7 @@ from courses.permissions import (
     has_global_course_access,
 )
 
-from .filters import CourseFilter
+from .filters import CourseFilter, CourseSearchFilter
 from .pagination import CoursePagination
 from .serializers import (
     CourseDetailSerializer,
@@ -47,9 +47,29 @@ def course_read_queryset():
 class CourseListCreateView(generics.ListCreateAPIView):
     permission_classes = (CourseAccessPermission,)
     pagination_class = CoursePagination
-    filter_backends = (DjangoFilterBackend, filters.SearchFilter)
+    filter_backends = (
+        DjangoFilterBackend,
+        CourseSearchFilter,
+        filters.OrderingFilter,
+    )
     filterset_class = CourseFilter
-    search_fields = ("title", "code")
+    search_fields = (
+        "title",
+        "code",
+        "description",
+        "teaching_assignments__user__first_name",
+        "teaching_assignments__user__last_name",
+    )
+    ordering_fields = (
+        "title",
+        "code",
+        "created_at",
+        "updated_at",
+        "start_date",
+        "end_date",
+        "status",
+    )
+    ordering = ("code",)
 
     def get_queryset(self):
         return courses_accessible_to(self.request.user, course_read_queryset())

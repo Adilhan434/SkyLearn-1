@@ -152,8 +152,11 @@ The versioned API is mounted in `api.v1.urls`:
 | `GET /api/v1/courses/{id}/` | Retrieve course metadata | Authenticated |
 | `/api/v1/organization/` | Reserved Organization namespace | API deferred |
 
-Course list filtering supports `status`, `semester` and `faculty`; search
-supports `title` and `code`.
+Course list filtering supports `status`, `semester`, `faculty`, `department`,
+`program`, `teacher`, `language` and `created_by`. Search covers `title`,
+`code`, `description` and assigned teacher names. Ordering is limited to
+`title`, `code`, `created_at`, `updated_at`, `start_date`, `end_date` and
+`status`; `page` and `page_size` control pagination.
 
 ## 6. Database and runtime
 

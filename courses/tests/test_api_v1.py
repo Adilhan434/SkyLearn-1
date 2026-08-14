@@ -154,6 +154,64 @@ class CourseAPITests(APITestCase):
         self.assertEqual(title_response.data["count"], 1)
         self.assertEqual(code_response.data["count"], 1)
 
+    def test_search_matches_description_and_teacher_full_name(self):
+        teacher = get_user_model().objects.create_user(
+            username="searchable-teacher",
+            first_name="Ada",
+            last_name="Lovelace",
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        searchable_course = self.create_course(
+            code="SEARCH-COURSE",
+            description="Distributed computing concepts",
+        )
+        CourseTeachingAssignment.objects.create(
+            course=searchable_course,
+            user=teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        self.client.force_authenticate(self.user)
+
+        description_response = self.client.get(
+            self.list_url,
+            {"search": "distributed"},
+        )
+        teacher_response = self.client.get(
+            self.list_url,
+            {"search": "Ada Lovelace"},
+        )
+
+        self.assertEqual(description_response.data["count"], 1)
+        self.assertEqual(teacher_response.data["count"], 1)
+        self.assertEqual(
+            teacher_response.data["results"][0]["id"],
+            searchable_course.pk,
+        )
+
+    def test_search_does_not_treat_assistant_as_teacher(self):
+        assistant = get_user_model().objects.create_user(
+            username="searchable-assistant",
+            first_name="Unique",
+            last_name="AssistantName",
+        )
+        assistant.roles.add(
+            Role.objects.get(code=RoleCode.TEACHING_ASSISTANT)
+        )
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=assistant,
+            role=CourseTeachingRole.TEACHING_ASSISTANT,
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            self.list_url,
+            {"search": "AssistantName"},
+        )
+
+        self.assertEqual(response.data["count"], 0)
+
     def test_filters_by_status_semester_and_faculty(self):
         self.create_course(
             code="CS-PUB",
@@ -175,6 +233,130 @@ class CourseAPITests(APITestCase):
         self.assertEqual(status_response.data["count"], 1)
         self.assertEqual(semester_response.data["count"], 1)
         self.assertEqual(faculty_response.data["count"], 0)
+
+    def test_filters_by_department_program_language_and_creator(self):
+        self.create_course(
+            code="RU-COURSE",
+            language="ru",
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        self.client.force_authenticate(self.user)
+
+        department_response = self.client.get(
+            self.list_url,
+            {"department": self.department.pk},
+        )
+        program_response = self.client.get(
+            self.list_url,
+            {"program": self.program.pk},
+        )
+        language_response = self.client.get(
+            self.list_url,
+            {"language": "ru"},
+        )
+        creator_response = self.client.get(
+            self.list_url,
+            {"created_by": self.user.pk},
+        )
+
+        self.assertEqual(department_response.data["count"], 2)
+        self.assertEqual(program_response.data["count"], 2)
+        self.assertEqual(language_response.data["count"], 1)
+        self.assertEqual(creator_response.data["count"], 1)
+
+    def test_filters_by_assigned_teacher_not_assistant(self):
+        teacher = get_user_model().objects.create_user(username="filter-teacher")
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        assistant = get_user_model().objects.create_user(
+            username="filter-assistant"
+        )
+        assistant.roles.add(
+            Role.objects.get(code=RoleCode.TEACHING_ASSISTANT)
+        )
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=assistant,
+            role=CourseTeachingRole.TEACHING_ASSISTANT,
+        )
+        self.client.force_authenticate(self.user)
+
+        teacher_response = self.client.get(
+            self.list_url,
+            {"teacher": teacher.pk},
+        )
+        assistant_response = self.client.get(
+            self.list_url,
+            {"teacher": assistant.pk},
+        )
+
+        self.assertEqual(teacher_response.data["count"], 1)
+        self.assertEqual(assistant_response.data["count"], 0)
+
+    def test_list_supports_ordering(self):
+        first_alphabetically = self.create_course(
+            title="Algorithms",
+            code="ZZ-COURSE",
+            start_date=date(2026, 8, 1),
+            end_date=date(2026, 8, 31),
+        )
+        self.create_course(title="Zoology", code="AA-COURSE")
+        self.client.force_authenticate(self.user)
+
+        title_response = self.client.get(self.list_url, {"ordering": "title"})
+        start_date_response = self.client.get(
+            self.list_url,
+            {"ordering": "start_date"},
+        )
+        newest_response = self.client.get(
+            self.list_url,
+            {"ordering": "-created_at"},
+        )
+
+        self.assertEqual(
+            [item["title"] for item in title_response.data["results"]],
+            sorted(
+                item["title"] for item in title_response.data["results"]
+            ),
+        )
+        self.assertEqual(
+            start_date_response.data["results"][0]["id"],
+            first_alphabetically.pk,
+        )
+        self.assertEqual(
+            newest_response.data["results"][0]["code"],
+            "AA-COURSE",
+        )
+
+    def test_list_supports_page_and_page_size(self):
+        for number in range(2, 6):
+            self.create_course(code=f"PAGE-{number}")
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            self.list_url,
+            {"page": 2, "page_size": 2},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 5)
+        self.assertEqual(len(response.data["results"]), 2)
+        self.assertIsNotNone(response.data["previous"])
+        self.assertIsNotNone(response.data["next"])
+
+    def test_invalid_choice_filter_returns_validation_error(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(self.list_url, {"language": "invalid"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("language", response.data["error"]["fields"])
 
     def test_regular_user_cannot_create_course(self):
         regular_user = get_user_model().objects.create_user(
