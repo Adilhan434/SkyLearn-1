@@ -1,11 +1,26 @@
+from django.db import transaction
 from django.db.models import Prefetch
-from rest_framework import generics
+from django.shortcuts import get_object_or_404
+from rest_framework import generics, status
+from rest_framework.response import Response
 
+from api.v1.exceptions import CodedAPIException
 from courses.models import Course
 from courses.permissions import CourseAccessPermission, courses_accessible_to
-from learning.models import CourseModule, CourseTopic, Lesson
+from learning.models import CourseModule, CourseTopic, Lesson, ReleaseType
+from learning.permissions import StructureManagePermission
 
-from .serializers import CourseStructureSerializer
+from .serializers import (
+    CourseModuleWriteSerializer,
+    CourseStructureSerializer,
+    DeleteConfirmationSerializer,
+)
+
+
+class StructureNotEmpty(CodedAPIException):
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "structure_not_empty"
+    default_detail = "Structure contains nested objects. Confirm cascade deletion."
 
 
 def course_structure_queryset():
@@ -33,3 +48,56 @@ class CourseStructureView(generics.RetrieveAPIView):
             self.request.user,
             course_structure_queryset(),
         )
+
+
+class CourseModuleCreateView(generics.CreateAPIView):
+    permission_classes = (StructureManagePermission,)
+    serializer_class = CourseModuleWriteSerializer
+
+    def get_course(self):
+        course = get_object_or_404(
+            courses_accessible_to(self.request.user),
+            pk=self.kwargs["course_pk"],
+        )
+        self.check_object_permissions(self.request, course)
+        return course
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["course"] = self.get_course()
+        return context
+
+
+class CourseModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
+    http_method_names = ("patch", "delete", "options")
+    permission_classes = (StructureManagePermission,)
+    serializer_class = CourseModuleWriteSerializer
+
+    def get_queryset(self):
+        accessible_courses = courses_accessible_to(self.request.user)
+        return CourseModule.objects.select_related("course").filter(
+            course__in=accessible_courses
+        )
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        confirmation = DeleteConfirmationSerializer(data=request.data)
+        confirmation.is_valid(raise_exception=True)
+        if instance.topics.exists() and not confirmation.validated_data["confirm"]:
+            raise StructureNotEmpty()
+        module_lessons = Lesson.objects.filter(topic__module=instance)
+        has_external_dependents = Lesson.objects.filter(
+            required_lesson__in=module_lessons
+        ).exclude(topic__module=instance).exists()
+        if has_external_dependents:
+            raise StructureNotEmpty(
+                "Module lessons are prerequisites for lessons outside the module."
+            )
+        module_lessons.filter(required_lesson__isnull=False).update(
+            required_lesson=None,
+            release_type=ReleaseType.ALWAYS,
+            release_at=None,
+        )
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -164,6 +164,9 @@ The versioned API is mounted in `api.v1.urls`:
 | `GET /api/v1/courses/{id}/` | Retrieve course metadata | Authenticated |
 | `GET /api/v1/courses/{id}/readiness/` | Course readiness score and checks | Course view permission |
 | `GET /api/v1/courses/{id}/structure/` | Nested Module, Topic and Lesson structure | Course view permission |
+| `POST /api/v1/courses/{id}/modules/` | Append or explicitly order a module | Structure-manage permission |
+| `PATCH /api/v1/modules/{id}/` | Update module metadata and release settings | Structure-manage permission |
+| `DELETE /api/v1/modules/{id}/` | Safely delete a module | Structure-manage permission |
 | `POST /api/v1/courses/{id}/submit-review/` | Submit Draft/Needs Revision course | Submit-review permission |
 | `POST /api/v1/courses/{id}/return-for-revision/` | Return Under Review course with a comment | Review permission |
 | `POST /api/v1/courses/{id}/publish/` | Publish an Under Review course | Publish permission |
@@ -183,6 +186,11 @@ Module, Topic and Lesson. Metadata, teacher and structure failures block
 review submission; a missing syllabus is reported as a warning and lowers the
 score without blocking submission. Lesson-material checks are added to the
 same service when learning materials become available.
+
+Deleting an empty module needs no confirmation. Deleting a module containing
+topics requires a JSON body of `{"confirm": true}`; otherwise the API returns
+`409 structure_not_empty`. Even a confirmed deletion is rejected when one of
+the module's lessons is a prerequisite for a lesson outside that module.
 
 ## 6. Database and runtime
 

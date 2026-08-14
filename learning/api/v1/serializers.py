@@ -1,3 +1,5 @@
+from django.db import transaction
+from django.db.models import Max
 from rest_framework import serializers
 
 from courses.models import Course
@@ -59,3 +61,103 @@ class CourseStructureSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
         fields = ("course_id", "modules")
+
+
+class CourseModuleWriteSerializer(serializers.ModelSerializer):
+    order = serializers.IntegerField(required=False, min_value=1)
+    release_type = serializers.CharField(required=False)
+
+    class Meta:
+        model = CourseModule
+        fields = (
+            "id",
+            "title",
+            "description",
+            "order",
+            "release_type",
+            "release_at",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_release_type(self, value):
+        allowed_values = {
+            choice_value for choice_value, _label in CourseModule._meta.get_field(
+                "release_type"
+            ).choices
+        }
+        if value not in allowed_values:
+            raise serializers.ValidationError("Invalid module release type.")
+        return value
+
+    def validate(self, attrs):
+        instance = self.instance
+        release_type = attrs.get(
+            "release_type",
+            getattr(instance, "release_type", "always"),
+        )
+        release_at = attrs.get(
+            "release_at",
+            getattr(instance, "release_at", None),
+        )
+        if release_type == "date" and release_at is None:
+            raise serializers.ValidationError(
+                {"release_at": "A date-based module requires release_at."}
+            )
+        if release_type != "date" and release_at is not None:
+            raise serializers.ValidationError(
+                {"release_at": "release_at is allowed only for date release."}
+            )
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        course = Course.objects.select_for_update().get(
+            pk=self.context["course"].pk
+        )
+        actor = self.context["request"].user
+        if "order" not in validated_data:
+            maximum_order = course.modules.aggregate(maximum=Max("order"))[
+                "maximum"
+            ]
+            validated_data["order"] = (maximum_order or 0) + 1
+        self._validate_unique_order(course, validated_data["order"])
+        return CourseModule.objects.create(
+            course=course,
+            created_by=actor,
+            updated_by=actor,
+            **validated_data,
+        )
+
+    def update(self, instance, validated_data):
+        actor = self.context["request"].user
+        order = validated_data.get("order", instance.order)
+        self._validate_unique_order(instance.course, order, instance.pk)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.updated_by = actor
+        instance.save()
+        return instance
+
+    @staticmethod
+    def _validate_unique_order(course, order, instance_pk=None):
+        modules = course.modules.filter(order=order)
+        if instance_pk is not None:
+            modules = modules.exclude(pk=instance_pk)
+        if modules.exists():
+            raise serializers.ValidationError(
+                {"order": "A module with this order already exists."}
+            )
+
+
+class DeleteConfirmationSerializer(serializers.Serializer):
+    confirm = serializers.BooleanField(default=False, required=False)
