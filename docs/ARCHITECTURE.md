@@ -222,6 +222,13 @@ sequence `1..N`. The operation locks the course and affected rows and commits
 as one transaction. Invalid or incomplete input returns the stable error code
 `invalid_structure_order` without a partial reorder.
 
+Student lesson availability is calculated centrally by
+`learning.availability.evaluate_lesson_availability`. It evaluates publication,
+module and lesson dates, previous-module completion, previous-lesson completion
+and explicit lesson prerequisites, and returns `is_available` plus a stable
+`lock_reason`. The caller supplies completed lesson IDs; the Student Course API
+will source them from `LessonProgress` when the progress domain is introduced.
+
 ## 6. Database and runtime
 
 PostgreSQL is the primary development and staging database. `DATABASE_URL`
