@@ -24,6 +24,9 @@ from learning.models import (
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
+PDF_CONTENT = b"%PDF-1.4\nprotected content\n%%EOF"
+
+
 class LearningMaterialAPITests(APITestCase):
     def setUp(self):
         self.media_directory = TemporaryDirectory()
@@ -143,7 +146,7 @@ class LearningMaterialAPITests(APITestCase):
         self.client.force_authenticate(self.manager)
         uploaded_file = SimpleUploadedFile(
             "guide.pdf",
-            b"PDF data",
+            PDF_CONTENT,
             content_type="application/pdf",
         )
 
@@ -164,7 +167,7 @@ class LearningMaterialAPITests(APITestCase):
         self.assertEqual(material.lesson, self.lesson)
         self.assertEqual(material.original_filename, "guide.pdf")
         self.assertEqual(material.mime_type, "application/pdf")
-        self.assertEqual(material.size, 8)
+        self.assertEqual(material.size, len(PDF_CONTENT))
         self.assertEqual(material.extension, "pdf")
         self.assertEqual(material.created_by, self.manager)
         self.assertNotIn("file", response.data)
@@ -212,6 +215,42 @@ class LearningMaterialAPITests(APITestCase):
         self.assertEqual(missing_url.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("file", missing_file.data["error"]["fields"])
         self.assertIn("external_url", missing_url.data["error"]["fields"])
+
+    def test_upload_rejects_spoofed_file_content(self):
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.lesson_material_url(),
+            {
+                "title": "Spoofed PDF",
+                "type": LearningMaterialType.PDF,
+                "file": SimpleUploadedFile(
+                    "spoofed.pdf",
+                    b"not really a PDF",
+                    content_type="application/pdf",
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", response.data["error"]["fields"])
+        self.assertFalse(LearningMaterial.objects.exists())
+
+    def test_changing_file_material_type_requires_new_file(self):
+        material = self.create_file_material()
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.patch(
+            self.detail_url(material),
+            {"type": LearningMaterialType.VIDEO},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", response.data["error"]["fields"])
+        material.refresh_from_db()
+        self.assertEqual(material.type, LearningMaterialType.PDF)
 
     def test_lesson_list_returns_only_its_materials(self):
         expected = self.create_file_material()
@@ -354,7 +393,7 @@ class LearningMaterialAPITests(APITestCase):
                 "type": LearningMaterialType.PDF,
                 "file": SimpleUploadedFile(
                     "download.pdf",
-                    b"protected content",
+                    PDF_CONTENT,
                     content_type="application/pdf",
                 ),
             },
@@ -368,7 +407,7 @@ class LearningMaterialAPITests(APITestCase):
 
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertIn("download.pdf", response["Content-Disposition"])
-        self.assertEqual(body, b"protected content")
+        self.assertEqual(body, PDF_CONTENT)
 
     def test_download_obeys_download_allowed(self):
         material = self.create_file_material(download_allowed=False)

@@ -1,6 +1,4 @@
-import mimetypes
-from pathlib import Path
-
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max
 from django.urls import reverse
@@ -9,6 +7,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from courses.models import Course
+from learning.file_validation import validate_material_file
 from learning.models import (
     CourseModule,
     CourseTopic,
@@ -533,33 +532,35 @@ class LearningMaterialSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"external_url": "A file material cannot contain a URL."}
                 )
+            if (
+                instance is not None
+                and material_type != instance.type
+                and "file" not in attrs
+            ):
+                raise serializers.ValidationError(
+                    {"file": "Changing the material type requires a new file."}
+                )
+            if "file" in attrs:
+                try:
+                    metadata = validate_material_file(
+                        attrs["file"],
+                        material_type,
+                    )
+                except ValidationError as exc:
+                    raise serializers.ValidationError(exc.message_dict) from exc
+                attrs.update(metadata.as_model_fields())
         return attrs
 
-    @staticmethod
-    def _set_file_metadata(validated_data, uploaded_file):
-        original_name = Path(uploaded_file.name).name
-        guessed_type, _encoding = mimetypes.guess_type(original_name)
-        validated_data.update(
-            original_filename=original_name,
-            mime_type=getattr(uploaded_file, "content_type", "")
-            or guessed_type
-            or "application/octet-stream",
-            size=uploaded_file.size,
-            extension=Path(original_name).suffix.lower().lstrip("."),
-            external_url="",
-        )
-
     def create(self, validated_data):
-        uploaded_file = validated_data.get("file")
-        if uploaded_file is not None:
-            self._set_file_metadata(validated_data, uploaded_file)
+        if validated_data.get("file") is not None:
+            validated_data["external_url"] = ""
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
         uploaded_file = validated_data.get("file")
         material_type = validated_data.get("type", instance.type)
         if uploaded_file is not None:
-            self._set_file_metadata(validated_data, uploaded_file)
+            validated_data["external_url"] = ""
         elif material_type in {
             LearningMaterialType.EXTERNAL_LINK,
             LearningMaterialType.LIBRARY_LINK,

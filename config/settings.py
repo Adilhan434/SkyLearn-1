@@ -302,6 +302,12 @@ STATICFILES_FINDERS = [
 # Media files config
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+MATERIAL_MAX_UPLOAD_SIZE_MB = config(
+    "MATERIAL_MAX_UPLOAD_SIZE_MB",
+    default=100,
+    cast=int,
+)
+MATERIAL_MAX_UPLOAD_SIZE = MATERIAL_MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 # -----------------------------------
 # E-mail configuration

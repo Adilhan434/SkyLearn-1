@@ -242,6 +242,11 @@ material filtering supports `search`, `type`, `lesson` and `module`. All
 operations require both the corresponding `materials.*` permission and object
 access to the owning course. Writes also follow the course editability rules,
 and downloads enforce `download_allowed` before opening the storage object.
+Uploads are limited by `MATERIAL_MAX_UPLOAD_SIZE_MB` (100 MB by default). The
+validation service rejects empty files, executable and deceptive double
+extensions, mismatched material types, invalid file signatures and conflicting
+declared MIME types. Trusted metadata is derived from validated bytes rather
+than accepted from the request.
 
 ## 6. Database and runtime
 
