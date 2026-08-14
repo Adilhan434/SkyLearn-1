@@ -16,10 +16,17 @@ must not delete Organization or Course records. Nullable values also allow
 data migrations, imports and automated system operations that have no acting
 user.
 
-This shared mechanism records ownership and timestamps only. Lifecycle status
-changes additionally create `courses.CourseStatusHistory` records containing
-the action, previous status, new status, optional review comment and actor.
-It is still not a general field-level Audit Log.
+This shared mechanism records ownership and timestamps only.
+
+`audit.CourseHistoryEvent` is the append-only course-scoped event store used by
+the Release 1 history API. It stores the acting user plus a snapshot of the
+affected object's type, ID and title, so delete events remain readable after
+the original Module, Topic, Lesson or Material has been removed. The optional
+`details` JSON object contains action-specific context; it must not contain
+secrets or complete field-level snapshots.
+
+The older `courses.CourseStatusHistory` model remains available while
+lifecycle writers are migrated to the common event store.
 
 ## Using the model
 
