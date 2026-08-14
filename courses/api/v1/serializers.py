@@ -133,6 +133,18 @@ class ReturnForRevisionSerializer(serializers.Serializer):
     comment = serializers.CharField(allow_blank=False, trim_whitespace=True)
 
 
+class ReadinessCheckSerializer(serializers.Serializer):
+    key = serializers.CharField()
+    status = serializers.CharField()
+    message = serializers.CharField(required=False)
+
+
+class CourseReadinessSerializer(serializers.Serializer):
+    score = serializers.IntegerField(min_value=0, max_value=100)
+    ready_for_review = serializers.BooleanField()
+    checks = ReadinessCheckSerializer(many=True)
+
+
 class CourseWriteSerializer(serializers.ModelSerializer):
     teacher = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(),

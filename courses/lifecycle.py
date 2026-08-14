@@ -9,8 +9,8 @@ from courses.models import (
     CourseLifecycleAction,
     CourseStatus,
     CourseStatusHistory,
-    CourseTeachingRole,
 )
+from courses.readiness import review_readiness_errors
 
 
 class InvalidCourseTransition(CodedAPIException):
@@ -51,18 +51,6 @@ TRANSITION_RULES = {
         CourseStatus.PUBLISHED,
     ),
 }
-
-
-def review_readiness_errors(course):
-    errors = []
-    has_primary_teacher = course.teaching_assignments.filter(
-        role=CourseTeachingRole.TEACHER,
-        is_primary=True,
-        user__is_active=True,
-    ).exists()
-    if not has_primary_teacher:
-        errors.append("Course has no active primary teacher.")
-    return errors
 
 
 @transaction.atomic

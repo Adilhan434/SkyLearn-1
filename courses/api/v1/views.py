@@ -20,12 +20,14 @@ from courses.permissions import (
     courses_accessible_to,
     has_global_course_access,
 )
+from courses.readiness import evaluate_course_readiness
 
 from .filters import CourseFilter, CourseSearchFilter
 from .pagination import CoursePagination
 from .serializers import (
     CourseDetailSerializer,
     CourseListSerializer,
+    CourseReadinessSerializer,
     ReturnForRevisionSerializer,
     CourseWriteSerializer,
 )
@@ -153,6 +155,20 @@ class CourseLifecycleView(generics.GenericAPIView):
             comment = input_serializer.validated_data["comment"]
         course = transition_course(course, self.action, request.user, comment)
         return Response(CourseDetailSerializer(course).data)
+
+
+class CourseReadinessView(generics.GenericAPIView):
+    permission_classes = (CourseAccessPermission,)
+    serializer_class = CourseReadinessSerializer
+
+    def get_queryset(self):
+        return courses_accessible_to(self.request.user, course_read_queryset())
+
+    @extend_schema(responses=CourseReadinessSerializer)
+    def get(self, request, *args, **kwargs):
+        del request, args, kwargs
+        course = self.get_object()
+        return Response(evaluate_course_readiness(course))
 
 
 class SubmitReviewView(CourseLifecycleView):

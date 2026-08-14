@@ -4,6 +4,7 @@ from .views import (
     ArchiveCourseView,
     CourseDetailView,
     CourseListCreateView,
+    CourseReadinessView,
     PublishCourseView,
     RestoreCourseView,
     ReturnForRevisionView,
@@ -16,6 +17,11 @@ app_name = "courses-v1"
 urlpatterns = [
     path("", CourseListCreateView.as_view(), name="list-create"),
     path("<int:pk>/", CourseDetailView.as_view(), name="detail"),
+    path(
+        "<int:pk>/readiness/",
+        CourseReadinessView.as_view(),
+        name="readiness",
+    ),
     path(
         "<int:pk>/submit-review/",
         SubmitReviewView.as_view(),

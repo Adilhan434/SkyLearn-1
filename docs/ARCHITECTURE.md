@@ -151,6 +151,7 @@ The versioned API is mounted in `api.v1.urls`:
 | `GET /api/v1/courses/` | Paginated searchable and filterable course list | Authenticated |
 | `POST /api/v1/courses/` | Create a course | Staff/admin |
 | `GET /api/v1/courses/{id}/` | Retrieve course metadata | Authenticated |
+| `GET /api/v1/courses/{id}/readiness/` | Course readiness score and checks | Course view permission |
 | `POST /api/v1/courses/{id}/submit-review/` | Submit Draft/Needs Revision course | Submit-review permission |
 | `POST /api/v1/courses/{id}/return-for-revision/` | Return Under Review course with a comment | Review permission |
 | `POST /api/v1/courses/{id}/publish/` | Publish an Under Review course | Publish permission |
@@ -163,6 +164,13 @@ Course list filtering supports `status`, `semester`, `faculty`, `department`,
 `code`, `description` and assigned teacher names. Ordering is limited to
 `title`, `code`, `created_at`, `updated_at`, `start_date`, `end_date` and
 `status`; `page` and `page_size` control pagination.
+
+Course readiness currently evaluates required metadata, active Organization
+relations, an active primary teacher and the optional syllabus. Metadata and
+teacher failures block review submission; a missing syllabus is reported as a
+warning and lowers the score without blocking submission. Structure and
+lesson-material checks are added to the same readiness service when those
+Release 1 models become available.
 
 ## 6. Database and runtime
 
