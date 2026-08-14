@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -8,7 +8,7 @@ from rest_framework.test import APITestCase
 
 from accounts.models import Role, RoleCode
 from courses.models import Course, CourseStatus
-from enrollments.models import Enrollment
+from enrollments.models import Enrollment, EnrollmentStatus
 from learning.models import CourseModule, CourseTopic, Lesson, ReleaseType
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 from progress.models import LessonProgress, LessonProgressStatus
@@ -165,6 +165,74 @@ class ProgressAPITests(APITestCase):
         self.assertEqual(unlocked.data["status"], LessonProgressStatus.COMPLETED)
         self.assertEqual(LessonProgress.objects.count(), 2)
 
+    def test_complete_preserves_existing_started_timestamp(self):
+        started_at = timezone.now() - timedelta(minutes=15)
+        progress = LessonProgress.objects.create(
+            student=self.student,
+            lesson=self.first_lesson,
+            status=LessonProgressStatus.IN_PROGRESS,
+            started_at=started_at,
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.post(self.lesson_url("complete", self.first_lesson))
+
+        progress.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(progress.status, LessonProgressStatus.COMPLETED)
+        self.assertEqual(progress.started_at, started_at)
+        self.assertGreaterEqual(progress.completed_at, progress.started_at)
+
+    def test_complete_not_started_sets_both_timestamps(self):
+        progress = LessonProgress.objects.create(
+            student=self.student,
+            lesson=self.first_lesson,
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.post(self.lesson_url("complete", self.first_lesson))
+
+        progress.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(progress.status, LessonProgressStatus.COMPLETED)
+        self.assertIsNotNone(progress.completed_at)
+        self.assertEqual(progress.started_at, progress.completed_at)
+
+    def test_complete_requires_active_enrollment(self):
+        enrollment = Enrollment.objects.get(student=self.student, course=self.course)
+        enrollment.status = EnrollmentStatus.WITHDRAWN
+        enrollment.save(update_fields=("status", "updated_at"))
+        self.client.force_authenticate(self.student)
+
+        response = self.client.post(self.lesson_url("complete", self.first_lesson))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(
+            response.data["error"]["code"],
+            "student_lesson_not_found",
+        )
+        self.assertFalse(LessonProgress.objects.exists())
+
+    def test_complete_requires_published_course_and_lesson(self):
+        self.client.force_authenticate(self.student)
+        self.course.status = CourseStatus.DRAFT
+        self.course.save(update_fields=("status", "updated_at"))
+
+        draft_response = self.client.post(
+            self.lesson_url("complete", self.first_lesson)
+        )
+        self.course.status = CourseStatus.PUBLISHED
+        self.course.save(update_fields=("status", "updated_at"))
+        self.first_lesson.is_published = False
+        self.first_lesson.save(update_fields=("is_published", "updated_at"))
+        unpublished_response = self.client.post(
+            self.lesson_url("complete", self.first_lesson)
+        )
+
+        self.assertEqual(draft_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(unpublished_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(LessonProgress.objects.exists())
+
     def test_locked_lesson_cannot_be_started_or_completed(self):
         self.client.force_authenticate(self.student)
 
@@ -175,6 +243,24 @@ class ProgressAPITests(APITestCase):
         self.assertEqual(complete.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(start.data["error"]["code"], "lesson_locked")
         self.assertFalse(LessonProgress.objects.exists())
+
+    def test_locked_complete_does_not_mutate_existing_progress(self):
+        started_at = timezone.now()
+        progress = LessonProgress.objects.create(
+            student=self.student,
+            lesson=self.second_lesson,
+            status=LessonProgressStatus.IN_PROGRESS,
+            started_at=started_at,
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.post(self.lesson_url("complete", self.second_lesson))
+
+        progress.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(progress.status, LessonProgressStatus.IN_PROGRESS)
+        self.assertEqual(progress.started_at, started_at)
+        self.assertIsNone(progress.completed_at)
 
     def test_course_progress_uses_currently_available_lessons(self):
         self.client.force_authenticate(self.student)

@@ -146,14 +146,22 @@ class LessonProgressService:
         cls._assert_available(student, lesson)
         completed_at = timezone.now()
         if progress is None:
-            progress = LessonProgress.objects.create(
+            (
+                progress,
+                created,
+            ) = LessonProgress.objects.select_for_update().get_or_create(
                 student=student,
                 lesson=lesson,
-                status=LessonProgressStatus.COMPLETED,
-                started_at=completed_at,
-                completed_at=completed_at,
+                defaults={
+                    "status": LessonProgressStatus.COMPLETED,
+                    "started_at": completed_at,
+                    "completed_at": completed_at,
+                },
             )
-            return progress, True
+            if created:
+                return progress, True
+            if progress.status == LessonProgressStatus.COMPLETED:
+                return progress, False
         progress.status = LessonProgressStatus.COMPLETED
         progress.started_at = progress.started_at or completed_at
         progress.completed_at = completed_at
