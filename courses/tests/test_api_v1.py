@@ -1048,6 +1048,18 @@ class CourseAPITests(APITestCase):
         self.assertEqual(copied_material.created_by, self.user)
         self.assertFalse(copied.teaching_assignments.exists())
         self.assertFalse(copied.scorm_packages.exists())
+        event = CourseHistoryEvent.objects.get(
+            course=copied,
+            action=CourseHistoryAction.COPIED,
+        )
+        self.assertEqual(event.actor, self.user)
+        self.assertEqual(
+            event.details,
+            {
+                "source_course_id": self.course.pk,
+                "source_course_code": self.course.code,
+            },
+        )
 
     def test_copy_requires_authentication_and_copy_permission(self):
         anonymous_response = self.client.post(
@@ -1195,6 +1207,15 @@ class CourseAPITests(APITestCase):
         self.assertEqual(first_lesson.materials.get().title, "Handbook")
         self.assertFalse(course.teaching_assignments.exists())
         self.assertFalse(course.scorm_packages.exists())
+        event = CourseHistoryEvent.objects.get(
+            course=course,
+            action=CourseHistoryAction.COURSE_CREATED,
+        )
+        self.assertEqual(event.actor, self.user)
+        self.assertEqual(
+            event.details,
+            {"source": "template", "template_id": template.pk},
+        )
 
     def test_template_endpoints_enforce_authentication_and_permissions(self):
         anonymous_response = self.client.get(self.template_list_url())

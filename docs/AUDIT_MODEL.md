@@ -41,6 +41,12 @@ Creating a file or link material appends `material_uploaded`; direct and
 cascade deletion append `material_deleted`. History details contain the public
 material type only and never expose storage paths, file contents or URLs.
 
+Lifecycle transitions append `submitted_for_review`,
+`returned_for_revision`, `published`, `archived` and `restored`, including the
+previous and resulting statuses. Course copy appends `copied` to the new course
+with the source course ID/code; creating from a template appends
+`course_created` with the template ID.
+
 ## Using the model
 
 ```python

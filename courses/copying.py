@@ -2,6 +2,8 @@ from django.db import IntegrityError, transaction
 from django.utils.dateparse import parse_date, parse_datetime
 
 from api.v1.exceptions import CodedAPIException
+from audit.models import CourseHistoryAction, CourseHistoryObjectType
+from audit.services import record_course_history_event
 from courses.models import Course, CourseStatus
 from learning.models import (
     CourseModule,
@@ -294,4 +296,17 @@ def copy_course(source, title, code, actor):
 
     source = course_copy_queryset().select_for_update().get(pk=source.pk)
     snapshot = build_course_snapshot(source)
-    return create_course_from_snapshot(snapshot, title, code, actor)
+    copied_course = create_course_from_snapshot(snapshot, title, code, actor)
+    record_course_history_event(
+        course=copied_course,
+        action=CourseHistoryAction.COPIED,
+        actor=actor,
+        object_type=CourseHistoryObjectType.COURSE,
+        object_id=copied_course.pk,
+        object_title=copied_course.title,
+        details={
+            "source_course_id": source.pk,
+            "source_course_code": source.code,
+        },
+    )
+    return copied_course

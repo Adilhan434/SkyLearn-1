@@ -1,5 +1,7 @@
 from django.db import transaction
 
+from audit.models import CourseHistoryAction, CourseHistoryObjectType
+from audit.services import record_course_history_event
 from courses.copying import (
     build_course_snapshot,
     course_copy_queryset,
@@ -31,4 +33,17 @@ def create_course_from_template(template, title, code, actor):
         pk=template.pk,
         is_active=True,
     )
-    return create_course_from_snapshot(template.snapshot, title, code, actor)
+    course = create_course_from_snapshot(template.snapshot, title, code, actor)
+    record_course_history_event(
+        course=course,
+        action=CourseHistoryAction.COURSE_CREATED,
+        actor=actor,
+        object_type=CourseHistoryObjectType.COURSE,
+        object_id=course.pk,
+        object_title=course.title,
+        details={
+            "source": "template",
+            "template_id": template.pk,
+        },
+    )
+    return course

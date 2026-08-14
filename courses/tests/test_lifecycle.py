@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import Role, RoleCode
+from audit.models import CourseHistoryAction, CourseHistoryEvent
 from courses.models import (
     Course,
     CourseLifecycleAction,
@@ -101,6 +102,16 @@ class CourseLifecycleAPITests(APITestCase):
         self.assertEqual(history.from_status, CourseStatus.DRAFT)
         self.assertEqual(history.to_status, CourseStatus.UNDER_REVIEW)
         self.assertEqual(history.created_by, self.teacher)
+        event = CourseHistoryEvent.objects.get(course=self.course)
+        self.assertEqual(event.action, CourseHistoryAction.SUBMITTED_FOR_REVIEW)
+        self.assertEqual(event.actor, self.teacher)
+        self.assertEqual(
+            event.details,
+            {
+                "from_status": CourseStatus.DRAFT,
+                "to_status": CourseStatus.UNDER_REVIEW,
+            },
+        )
 
     def test_submit_review_requires_active_primary_teacher(self):
         self.course.teaching_assignments.all().delete()
@@ -117,6 +128,7 @@ class CourseLifecycleAPITests(APITestCase):
         self.course.refresh_from_db()
         self.assertEqual(self.course.status, CourseStatus.DRAFT)
         self.assertFalse(CourseStatusHistory.objects.exists())
+        self.assertFalse(CourseHistoryEvent.objects.exists())
 
     def test_teacher_cannot_submit_unassigned_course(self):
         self.course.teaching_assignments.all().delete()
@@ -168,6 +180,9 @@ class CourseLifecycleAPITests(APITestCase):
             self.course.status_history.get().comment,
             "Add the missing syllabus.",
         )
+        event = CourseHistoryEvent.objects.get(course=self.course)
+        self.assertEqual(event.action, CourseHistoryAction.RETURNED_FOR_REVISION)
+        self.assertEqual(event.details["comment"], "Add the missing syllabus.")
 
     def test_teacher_can_edit_and_resubmit_course_needing_revision(self):
         self.course.status = CourseStatus.NEEDS_REVISION
@@ -207,6 +222,9 @@ class CourseLifecycleAPITests(APITestCase):
             self.course.status_history.get().action,
             CourseLifecycleAction.PUBLISH,
         )
+        event = CourseHistoryEvent.objects.get(course=self.course)
+        self.assertEqual(event.action, CourseHistoryAction.PUBLISHED)
+        self.assertEqual(event.actor, self.admin)
 
     def test_teacher_cannot_publish_course(self):
         self.course.status = CourseStatus.UNDER_REVIEW
@@ -238,6 +256,15 @@ class CourseLifecycleAPITests(APITestCase):
                 )
             ),
             [CourseLifecycleAction.ARCHIVE, CourseLifecycleAction.RESTORE],
+        )
+        self.assertEqual(
+            list(
+                self.course.history_events.order_by("created_at").values_list(
+                    "action",
+                    flat=True,
+                )
+            ),
+            [CourseHistoryAction.ARCHIVED, CourseHistoryAction.RESTORED],
         )
 
     def test_content_manager_without_archive_permission_is_forbidden(self):

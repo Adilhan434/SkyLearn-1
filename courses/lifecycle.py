@@ -4,6 +4,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from api.v1.exceptions import CodedAPIException
+from audit.models import CourseHistoryAction, CourseHistoryObjectType
+from audit.services import record_course_history_event
 from courses.models import (
     Course,
     CourseLifecycleAction,
@@ -52,6 +54,14 @@ TRANSITION_RULES = {
     ),
 }
 
+HISTORY_ACTIONS = {
+    CourseLifecycleAction.SUBMIT_REVIEW: CourseHistoryAction.SUBMITTED_FOR_REVIEW,
+    CourseLifecycleAction.RETURN_REVISION: CourseHistoryAction.RETURNED_FOR_REVISION,
+    CourseLifecycleAction.PUBLISH: CourseHistoryAction.PUBLISHED,
+    CourseLifecycleAction.ARCHIVE: CourseHistoryAction.ARCHIVED,
+    CourseLifecycleAction.RESTORE: CourseHistoryAction.RESTORED,
+}
+
 
 @transaction.atomic
 def transition_course(course, action, actor, comment=""):
@@ -89,5 +99,20 @@ def transition_course(course, action, actor, comment=""):
         comment=comment,
         created_by=actor,
         updated_by=actor,
+    )
+    details = {
+        "from_status": previous_status,
+        "to_status": rule.target,
+    }
+    if comment:
+        details["comment"] = comment
+    record_course_history_event(
+        course=locked_course,
+        action=HISTORY_ACTIONS[action],
+        actor=actor,
+        object_type=CourseHistoryObjectType.COURSE,
+        object_id=locked_course.pk,
+        object_title=locked_course.title,
+        details=details,
     )
     return locked_course
