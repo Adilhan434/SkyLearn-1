@@ -146,8 +146,10 @@ materials API layer.
 Course. It records the `active`, `completed`, `withdrawn` or `suspended`
 lifecycle state, distinguishes manual enrollment from SIS synchronization and
 can retain an external SIS identifier. The model uses the shared audit fields
-and is available in Django Admin. Enrollment uniqueness and management API are
-implemented in the following Release 1 tasks.
+and is available in Django Admin. A database constraint permits only one
+lifecycle record for each Student and Course pair; reenrollment reactivates
+that record instead of creating a duplicate. The management API is implemented
+in the following Release 1 task.
 
 ## 4. Organization and Course relationships
 

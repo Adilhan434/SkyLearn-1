@@ -47,6 +47,12 @@ class Enrollment(AuditModel):
 
     class Meta:
         ordering = ("-enrolled_at", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("student", "course"),
+                name="enrollment_unique_student_course",
+            ),
+        ]
         verbose_name = "Enrollment"
         verbose_name_plural = "Enrollments"
 

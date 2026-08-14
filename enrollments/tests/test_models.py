@@ -2,6 +2,7 @@ from datetime import date
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from accounts.models import Role, RoleCode
@@ -86,4 +87,26 @@ class EnrollmentModelTests(TestCase):
         self.assertIsInstance(
             admin.site._registry[Enrollment],
             EnrollmentAdmin,
+        )
+
+    def test_student_and_course_pair_is_unique(self):
+        Enrollment.objects.create(
+            student=self.student,
+            course=self.course,
+            status=EnrollmentStatus.WITHDRAWN,
+        )
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Enrollment.objects.create(
+                student=self.student,
+                course=self.course,
+                status=EnrollmentStatus.ACTIVE,
+            )
+
+        self.assertEqual(
+            Enrollment.objects.filter(
+                student=self.student,
+                course=self.course,
+            ).count(),
+            1,
         )
