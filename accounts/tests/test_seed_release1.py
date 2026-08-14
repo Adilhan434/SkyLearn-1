@@ -2,6 +2,7 @@ from io import StringIO
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db.models import F
 from django.test import TestCase, override_settings
 
 from accounts.models import (
@@ -13,6 +14,15 @@ from accounts.models import (
     Student,
     User,
 )
+from calendar_events.models import CalendarEvent
+from courses.models import (
+    Course,
+    CourseStatus,
+    CourseTeachingAssignment,
+    CourseTeachingRole,
+)
+from enrollments.models import Enrollment, EnrollmentStatus
+from learning.models import CourseModule, CourseTopic, LearningMaterial, Lesson
 from organization.models import Department, Faculty
 from organization.models import Group as OrganizationGroup
 from organization.models import Program as OrganizationProgram
@@ -160,6 +170,98 @@ class SeedRelease1CommandTests(TestCase):
             ).exists()
         )
 
+    def test_command_creates_release1_courses_and_learning_content(self):
+        self.run_seed()
+
+        seeded_courses = Course.objects.filter(
+            code__in={
+                "CS101",
+                "CS201",
+                "EE101",
+                "BUS101",
+                "CS001",
+                "BUS001",
+                "EE201",
+                "BUS201",
+                "CS301",
+            }
+        )
+        self.assertEqual(seeded_courses.count(), 9)
+        self.assertEqual(
+            seeded_courses.filter(status=CourseStatus.DRAFT).count(),
+            2,
+        )
+        self.assertEqual(
+            seeded_courses.filter(status=CourseStatus.UNDER_REVIEW).count(),
+            2,
+        )
+        self.assertEqual(
+            seeded_courses.filter(status=CourseStatus.PUBLISHED).count(),
+            4,
+        )
+        self.assertEqual(
+            seeded_courses.filter(status=CourseStatus.ARCHIVED).count(),
+            1,
+        )
+        self.assertEqual(
+            CourseModule.objects.filter(course__in=seeded_courses).count(), 20
+        )
+        self.assertEqual(
+            CourseTopic.objects.filter(module__course__in=seeded_courses).count(),
+            30,
+        )
+        self.assertEqual(
+            Lesson.objects.filter(topic__module__course__in=seeded_courses).count(),
+            50,
+        )
+        self.assertEqual(
+            LearningMaterial.objects.filter(course__in=seeded_courses).count(),
+            30,
+        )
+        self.assertFalse(
+            LearningMaterial.objects.exclude(
+                course_id=F("lesson__topic__module__course_id")
+            ).exists()
+        )
+
+        self.assertEqual(
+            CourseTeachingAssignment.objects.filter(
+                course__in=seeded_courses,
+                role=CourseTeachingRole.TEACHER,
+                is_primary=True,
+            ).count(),
+            9,
+        )
+        self.assertEqual(
+            CourseTeachingAssignment.objects.filter(
+                course__in=seeded_courses,
+                role=CourseTeachingRole.TEACHING_ASSISTANT,
+            ).count(),
+            9,
+        )
+
+    def test_command_creates_student_enrollments_and_calendar_events(self):
+        self.run_seed()
+
+        student = User.objects.get(email="student@su.edu.kg")
+        enrollments = Enrollment.objects.filter(student=student)
+        self.assertEqual(enrollments.count(), 4)
+        self.assertFalse(
+            enrollments.exclude(
+                status=EnrollmentStatus.ACTIVE,
+                course__status=CourseStatus.PUBLISHED,
+            ).exists()
+        )
+
+        events = CalendarEvent.objects.filter(title__startswith="Release 1 event ")
+        self.assertEqual(events.count(), 15)
+        self.assertFalse(
+            events.exclude(
+                is_public=True,
+                course__status=CourseStatus.PUBLISHED,
+            ).exists()
+        )
+
     def test_command_is_idempotent(self):
         self.run_seed()
         user_ids = list(
@@ -178,6 +280,14 @@ class SeedRelease1CommandTests(TestCase):
             "organization_programs": OrganizationProgram.objects.count(),
             "organization_groups": OrganizationGroup.objects.count(),
             "semesters": Semester.objects.count(),
+            "courses": Course.objects.count(),
+            "assignments": CourseTeachingAssignment.objects.count(),
+            "modules": CourseModule.objects.count(),
+            "topics": CourseTopic.objects.count(),
+            "lessons": Lesson.objects.count(),
+            "materials": LearningMaterial.objects.count(),
+            "enrollments": Enrollment.objects.count(),
+            "events": CalendarEvent.objects.count(),
         }
 
         self.run_seed()
@@ -209,6 +319,17 @@ class SeedRelease1CommandTests(TestCase):
             counts["organization_groups"],
         )
         self.assertEqual(Semester.objects.count(), counts["semesters"])
+        self.assertEqual(Course.objects.count(), counts["courses"])
+        self.assertEqual(
+            CourseTeachingAssignment.objects.count(),
+            counts["assignments"],
+        )
+        self.assertEqual(CourseModule.objects.count(), counts["modules"])
+        self.assertEqual(CourseTopic.objects.count(), counts["topics"])
+        self.assertEqual(Lesson.objects.count(), counts["lessons"])
+        self.assertEqual(LearningMaterial.objects.count(), counts["materials"])
+        self.assertEqual(Enrollment.objects.count(), counts["enrollments"])
+        self.assertEqual(CalendarEvent.objects.count(), counts["events"])
 
     def test_command_restores_default_role_permissions(self):
         teacher_role = Role.objects.get(code=RoleCode.TEACHER)
