@@ -208,7 +208,9 @@ SPECTACULAR_SETTINGS = {
         'api.v1.schema.include_only_v1_endpoints',
     ],
     'ENUM_NAME_OVERRIDES': {
+        'CourseStatusEnum': 'courses.models.CourseStatus',
         'RoleCodeEnum': 'accounts.models.RoleCode',
+        'ScormPackageStatusEnum': 'learning.models.ScormPackageStatus',
     },
 }
 
@@ -342,6 +344,18 @@ MATERIAL_MAX_UPLOAD_SIZE_MB = config(
     cast=int,
 )
 MATERIAL_MAX_UPLOAD_SIZE = MATERIAL_MAX_UPLOAD_SIZE_MB * 1024 * 1024
+SCORM_MAX_FILES = config("SCORM_MAX_FILES", default=5000, cast=int)
+SCORM_MAX_UNCOMPRESSED_SIZE_MB = config(
+    "SCORM_MAX_UNCOMPRESSED_SIZE_MB",
+    default=500,
+    cast=int,
+)
+SCORM_MAX_UNCOMPRESSED_SIZE = SCORM_MAX_UNCOMPRESSED_SIZE_MB * 1024 * 1024
+SCORM_FRAME_ANCESTORS = config(
+    "SCORM_FRAME_ANCESTORS",
+    default=",".join(CORS_ALLOWED_ORIGINS),
+    cast=Csv(),
+)
 
 # -----------------------------------
 # E-mail configuration

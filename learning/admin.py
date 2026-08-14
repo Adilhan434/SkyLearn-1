@@ -4,7 +4,7 @@ from django.db import models
 
 from audit.admin import AuditAdminMixin
 
-from .models import CourseModule, CourseTopic, LearningMaterial, Lesson
+from .models import CourseModule, CourseTopic, LearningMaterial, Lesson, ScormPackage
 
 
 class PrivateFileInput(forms.ClearableFileInput):
@@ -67,6 +67,27 @@ class LearningMaterialAdmin(AuditAdminMixin, admin.ModelAdmin):
         "lesson__title",
         "course__title",
         "course__code",
+    )
+    list_select_related = (
+        "course",
+        "lesson",
+        "lesson__topic",
+        "lesson__topic__module",
+    )
+
+
+@admin.register(ScormPackage)
+class ScormPackageAdmin(AuditAdminMixin, admin.ModelAdmin):
+    formfield_overrides = {
+        models.FileField: {"widget": PrivateFileInput},
+    }
+    list_display = ("title", "course", "lesson", "version", "status", "created_at")
+    list_filter = ("status", "version", "course")
+    search_fields = (
+        "title",
+        "course__title",
+        "course__code",
+        "lesson__title",
     )
     list_select_related = (
         "course",

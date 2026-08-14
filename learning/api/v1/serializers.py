@@ -16,9 +16,12 @@ from learning.models import (
     Lesson,
     LessonType,
     ReleaseType,
+    ScormPackage,
+    ScormPackageStatus,
     VideoProcessingStatus,
 )
 from learning.reordering import InvalidStructureOrder
+from learning.scorm import validate_scorm_package
 from learning.video_processing import VideoProcessingService
 
 
@@ -612,3 +615,61 @@ class CourseMaterialFilterSerializer(serializers.Serializer):
     )
     lesson = serializers.IntegerField(required=False, min_value=1)
     module = serializers.IntegerField(required=False, min_value=1)
+
+
+class ScormPackageSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(write_only=True)
+    launch_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ScormPackage
+        fields = (
+            "id",
+            "course",
+            "lesson",
+            "file",
+            "title",
+            "version",
+            "launch_path",
+            "status",
+            "launch_url",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "course",
+            "lesson",
+            "version",
+            "launch_path",
+            "status",
+            "launch_url",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
+
+    @extend_schema_field(OpenApiTypes.URI)
+    def get_launch_url(self, obj):
+        if obj.status != ScormPackageStatus.READY or not obj.launch_path:
+            return None
+        return reverse(
+            "api-v1:learning-v1:scorm-content",
+            kwargs={"pk": obj.pk, "path": obj.launch_path},
+        )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        try:
+            metadata = validate_scorm_package(attrs["file"])
+        except ValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
+        attrs.update(
+            version=metadata.version,
+            launch_path=metadata.launch_path,
+            status=ScormPackageStatus.READY,
+        )
+        return attrs

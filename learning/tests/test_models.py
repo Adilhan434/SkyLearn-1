@@ -15,6 +15,7 @@ from learning.admin import (
     LearningMaterialAdmin,
     LessonAdmin,
     PrivateFileInput,
+    ScormPackageAdmin,
 )
 from learning.models import (
     CourseModule,
@@ -24,6 +25,8 @@ from learning.models import (
     Lesson,
     LessonType,
     ReleaseType,
+    ScormPackage,
+    ScormPackageStatus,
     VideoProcessingStatus,
 )
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
@@ -357,3 +360,27 @@ class LearningStructureModelTests(TestCase):
         widget = PrivateFileInput()
 
         self.assertFalse(widget.is_initial(object()))
+
+    def test_scorm_package_course_must_match_lesson_course(self):
+        package = ScormPackage(
+            lesson=self.make_lesson(),
+            course=self.other_course,
+            title="Foreign SCORM",
+            file="learning/scorm/course.zip",
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "SCORM package course must match the lesson course.",
+        ):
+            package.full_clean()
+
+    def test_scorm_package_statuses_and_admin_registration(self):
+        self.assertEqual(
+            {value for value, _label in ScormPackageStatus.choices},
+            {"uploaded", "ready", "failed"},
+        )
+        self.assertIsInstance(
+            admin.site._registry[ScormPackage],
+            ScormPackageAdmin,
+        )

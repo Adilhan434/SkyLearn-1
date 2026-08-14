@@ -43,5 +43,6 @@ class LMSAppStructureTests(SimpleTestCase):
                 "CourseTopic",
                 "Lesson",
                 "LearningMaterial",
+                "ScormPackage",
             },
         )

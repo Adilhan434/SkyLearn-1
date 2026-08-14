@@ -1,7 +1,14 @@
+import mimetypes
+from zipfile import BadZipFile
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Prefetch, Q
-from django.http import FileResponse
+from django.http import FileResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.clickjacking import xframe_options_exempt
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
@@ -17,6 +24,7 @@ from learning.models import (
     LearningMaterialType,
     Lesson,
     ReleaseType,
+    ScormPackage,
     VideoProcessingStatus,
 )
 from learning.permissions import (
@@ -25,6 +33,7 @@ from learning.permissions import (
     StructureObjectPermission,
 )
 from learning.reordering import reorder_structure
+from learning.scorm import stream_scorm_member
 
 from .serializers import (
     CourseMaterialFilterSerializer,
@@ -34,6 +43,7 @@ from .serializers import (
     DeleteConfirmationSerializer,
     LessonWriteSerializer,
     LearningMaterialSerializer,
+    ScormPackageSerializer,
     StructureReorderSerializer,
 )
 
@@ -413,3 +423,90 @@ class LearningMaterialPlaybackView(generics.GenericAPIView):
             filename=material.original_filename or material.file.name,
             content_type=material.mime_type or "video/mp4",
         )
+
+
+def scorm_queryset_for(user):
+    return ScormPackage.objects.select_related(
+        "course",
+        "lesson",
+        "lesson__topic",
+        "lesson__topic__module",
+    ).filter(course__in=courses_accessible_to(user))
+
+
+class LessonScormPackageListCreateView(generics.ListCreateAPIView):
+    permission_classes = (MaterialPermission,)
+    serializer_class = ScormPackageSerializer
+
+    def get_lesson(self):
+        lesson = get_object_or_404(
+            Lesson.objects.select_related("topic__module__course").filter(
+                topic__module__course__in=courses_accessible_to(self.request.user)
+            ),
+            pk=self.kwargs["lesson_pk"],
+        )
+        self.check_object_permissions(self.request, lesson)
+        return lesson
+
+    def get_queryset(self):
+        return scorm_queryset_for(self.request.user).filter(lesson=self.get_lesson())
+
+    def perform_create(self, serializer):
+        lesson = self.get_lesson()
+        serializer.save(
+            lesson=lesson,
+            course=lesson.course,
+            created_by=self.request.user,
+            updated_by=self.request.user,
+        )
+
+
+class ScormPackageDetailView(generics.RetrieveAPIView):
+    permission_classes = (MaterialPermission,)
+    serializer_class = ScormPackageSerializer
+
+    def get_queryset(self):
+        return scorm_queryset_for(self.request.user)
+
+
+class ScormContentUnavailable(CodedAPIException):
+    error_code = "scorm_content_unavailable"
+    default_detail = "SCORM package content is unavailable."
+
+
+@method_decorator(xframe_options_exempt, name="dispatch")
+class ScormPackageContentView(generics.GenericAPIView):
+    permission_classes = (MaterialPermission,)
+
+    @extend_schema(responses={(200, "application/octet-stream"): OpenApiTypes.BINARY})
+    def get(self, request, *args, **kwargs):
+        del args, kwargs
+        package = get_object_or_404(
+            scorm_queryset_for(request.user),
+            pk=self.kwargs["pk"],
+        )
+        self.check_object_permissions(request, package)
+        try:
+            content, normalized_path = stream_scorm_member(
+                package.file,
+                self.kwargs["path"],
+            )
+        except (BadZipFile, KeyError, OSError, RuntimeError, ValidationError) as exc:
+            raise ScormContentUnavailable() from exc
+        content_type = mimetypes.guess_type(normalized_path)[0]
+        response = StreamingHttpResponse(
+            content,
+            content_type=content_type or "application/octet-stream",
+        )
+        frame_ancestors = " ".join(("'self'", *settings.SCORM_FRAME_ANCESTORS))
+        response["Content-Security-Policy"] = (
+            "sandbox allow-scripts allow-forms; "
+            f"frame-ancestors {frame_ancestors}; "
+            "default-src 'self' data: blob:; "
+            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "img-src 'self' data: blob:; media-src 'self' blob:"
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Cache-Control"] = "private, no-store"
+        return response

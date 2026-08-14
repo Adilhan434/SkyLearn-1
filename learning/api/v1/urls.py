@@ -10,6 +10,9 @@ from .views import (
     LearningMaterialDownloadView,
     LearningMaterialPlaybackView,
     LessonMaterialListCreateView,
+    LessonScormPackageListCreateView,
+    ScormPackageContentView,
+    ScormPackageDetailView,
 )
 
 
@@ -48,5 +51,20 @@ urlpatterns = [
         "materials/<int:pk>/playback/",
         LearningMaterialPlaybackView.as_view(),
         name="material-playback",
+    ),
+    path(
+        "lessons/<int:lesson_pk>/scorm-packages/",
+        LessonScormPackageListCreateView.as_view(),
+        name="lesson-scorm-list-create",
+    ),
+    path(
+        "scorm-packages/<int:pk>/",
+        ScormPackageDetailView.as_view(),
+        name="scorm-detail",
+    ),
+    path(
+        "scorm-packages/<int:pk>/content/<path:path>",
+        ScormPackageContentView.as_view(),
+        name="scorm-content",
     ),
 ]

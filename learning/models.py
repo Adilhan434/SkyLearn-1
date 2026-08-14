@@ -44,6 +44,12 @@ class VideoProcessingStatus(models.TextChoices):
     FAILED = "failed", "Failed"
 
 
+class ScormPackageStatus(models.TextChoices):
+    UPLOADED = "uploaded", "Uploaded"
+    READY = "ready", "Ready"
+    FAILED = "failed", "Failed"
+
+
 class CourseModule(AuditModel):
     course = models.ForeignKey(
         Course,
@@ -319,6 +325,54 @@ class LearningMaterial(AuditModel):
             if lesson_course_id != self.course_id:
                 raise ValidationError(
                     {"course": "Material course must match the lesson course."}
+                )
+
+    def __str__(self):
+        return f"{self.course.code} / {self.lesson.title} / {self.title}"
+
+
+class ScormPackage(AuditModel):
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="scorm_packages",
+    )
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name="scorm_packages",
+    )
+    file = models.FileField(
+        upload_to="learning/scorm/",
+        storage=material_storage,
+    )
+    title = models.CharField(max_length=255)
+    version = models.CharField(max_length=50, blank=True)
+    launch_path = models.CharField(max_length=500, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=ScormPackageStatus.choices,
+        default=ScormPackageStatus.UPLOADED,
+    )
+
+    class Meta:
+        ordering = ("lesson", "id")
+        indexes = [
+            models.Index(
+                fields=("course", "status"),
+                name="learn_scorm_course_status",
+            ),
+        ]
+        verbose_name = "SCORM package"
+        verbose_name_plural = "SCORM packages"
+
+    def clean(self):
+        super().clean()
+        if self.lesson_id and self.course_id:
+            lesson_course_id = self.lesson.topic.module.course_id
+            if lesson_course_id != self.course_id:
+                raise ValidationError(
+                    {"course": "SCORM package course must match the lesson course."}
                 )
 
     def __str__(self):

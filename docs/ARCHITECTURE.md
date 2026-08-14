@@ -191,6 +191,9 @@ The versioned API is mounted in `api.v1.urls`:
 | `DELETE /api/v1/materials/{id}/` | Delete a material record | Materials-delete permission |
 | `GET /api/v1/materials/{id}/download/` | Permission-checked file download | Materials-view permission and download policy |
 | `GET /api/v1/materials/{id}/playback/` | Stream a ready video from private storage | Materials-view permission and course access |
+| `GET, POST /api/v1/lessons/{id}/scorm-packages/` | List or upload SCORM packages | Materials-view/upload permission |
+| `GET /api/v1/scorm-packages/{id}/` | Retrieve SCORM metadata and launch URL | Materials-view permission and course access |
+| `GET /api/v1/scorm-packages/{id}/content/{path}` | Stream a launch file or package asset | Materials-view permission and course access |
 | `GET /api/v1/courses/{id}/materials/` | Search and filter all course materials | Materials-view permission |
 | `POST /api/v1/courses/{id}/submit-review/` | Submit Draft/Needs Revision course | Submit-review permission |
 | `POST /api/v1/courses/{id}/return-for-revision/` | Return Under Review course with a comment | Review permission |
@@ -259,6 +262,17 @@ permission-checked `GET /api/v1/materials/{id}/playback/` endpoint; raw storage
 URLs remain unavailable. The service interface can later be backed by an
 asynchronous transcoding worker without moving processing into model or view
 logic.
+
+`ScormPackage` provides the Release 1 SCORM foundation. Upload validation
+requires a real ZIP with a root `imsmanifest.xml`, parses its schema version and
+selects an existing SCO launch resource. Unsafe paths, duplicate names,
+encrypted entries, XML declarations capable of entity expansion, excessive
+file counts, decompressed size and compression ratio are rejected. Packages
+remain in private storage; launch HTML and relative assets are streamed from
+the archive through authenticated endpoints without extraction to disk. Launch
+responses use a sandboxed Content Security Policy and configurable
+`SCORM_FRAME_ANCESTORS`. Gradebook integration, runtime tracking and advanced
+SCORM analytics are intentionally deferred.
 
 ## 6. Database and runtime
 
