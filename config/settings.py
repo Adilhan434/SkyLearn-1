@@ -216,6 +216,11 @@ SPECTACULAR_SETTINGS = {
     'PREPROCESSING_HOOKS': [
         'api.v1.schema.include_only_v1_endpoints',
     ],
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'api.v1.schema.enrich_openapi_schema',
+    ],
+    'COMPONENT_SPLIT_REQUEST': True,
     'ENUM_NAME_OVERRIDES': {
         'CourseStatusEnum': 'courses.models.CourseStatus',
         'CourseHistoryActionEnum': 'audit.models.CourseHistoryAction',

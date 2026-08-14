@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_exempt
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, status
 from rest_framework.response import Response
 
@@ -426,6 +426,9 @@ class LearningMaterialDetailView(generics.RetrieveUpdateDestroyAPIView):
         instance.delete()
 
 
+@extend_schema_view(
+    get=extend_schema(parameters=[CourseMaterialFilterSerializer]),
+)
 class CourseMaterialListView(generics.ListAPIView):
     permission_classes = (MaterialPermission,)
     serializer_class = LearningMaterialSerializer
