@@ -168,6 +168,22 @@ dedicated task, statuses are `not_started` and `overall_progress` is `0`.
 Protected material download and video playback accept an enrolled Student but
 continue to reject users without an Active enrollment in the Published course.
 
+### SIS enrollment integration
+
+`SISIntegrationService` is the transport-independent integration boundary for
+SIS enrollment events. It resolves a student by `accounts.Student.id_number`
+and a course by its case-insensitive `Course.code`, then enrolls, reactivates or
+withdraws the existing enrollment lifecycle record. `SISSyncEvent` stores each
+processed event under a unique `external_event_id`, making retries idempotent.
+Repeating the same payload returns the stored result; reusing an event ID with
+a different payload returns a conflict. Failed events are rolled back together
+with their journal entry, so they can be retried after the source data is fixed.
+
+The development/admin endpoint is intentionally protected by the existing
+`enrollments.manage` permission. A production SIS transport can call the same
+service later without coupling credentials or vendor-specific code to the LMS
+domain layer.
+
 ## 4. Organization and Course relationships
 
 ```text
@@ -233,6 +249,7 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/{id}/enrollments/` | Manually enroll or reactivate a Student | Enrollment-manage permission and course access |
 | `GET /api/v1/student/courses/` | Paginated courses available to the current Student | Student role and course-view permission |
 | `GET /api/v1/student/courses/{id}/` | Safe enrolled Course metadata | Student role and active enrollment |
+| `POST /api/v1/integrations/sis/enrollments/sync/` | Idempotently apply an SIS enroll/withdraw event | Enrollment-manage permission |
 | `GET, POST /api/v1/course-templates/` | List active templates or snapshot an accessible course | Copy permission |
 | `GET /api/v1/course-templates/{id}/` | Retrieve active template metadata | Copy permission |
 | `POST /api/v1/course-templates/{id}/create-course/` | Create a new Draft from an active template | Copy and create permissions |

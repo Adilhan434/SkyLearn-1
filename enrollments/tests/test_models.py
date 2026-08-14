@@ -7,8 +7,14 @@ from django.test import TestCase
 
 from accounts.models import Role, RoleCode
 from courses.models import Course
-from enrollments.admin import EnrollmentAdmin
-from enrollments.models import Enrollment, EnrollmentSource, EnrollmentStatus
+from enrollments.admin import EnrollmentAdmin, SISSyncEventAdmin
+from enrollments.models import (
+    Enrollment,
+    EnrollmentSource,
+    EnrollmentStatus,
+    SISSyncAction,
+    SISSyncEvent,
+)
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
@@ -109,4 +115,19 @@ class EnrollmentModelTests(TestCase):
                 course=self.course,
             ).count(),
             1,
+        )
+
+    def test_sis_event_model_and_admin_registration(self):
+        event = SISSyncEvent.objects.create(
+            external_event_id="evt-model",
+            student_external_id="ST-1001",
+            course_code=self.course.code,
+            action=SISSyncAction.ENROLL,
+            created_by=self.actor,
+        )
+
+        self.assertEqual(str(event), "evt-model")
+        self.assertIsInstance(
+            admin.site._registry[SISSyncEvent],
+            SISSyncEventAdmin,
         )

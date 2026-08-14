@@ -36,7 +36,7 @@ class LMSAppStructureTests(SimpleTestCase):
             for model in apps.get_app_config("enrollments").get_models()
         }
 
-        self.assertEqual(model_names, {"Enrollment"})
+        self.assertEqual(model_names, {"Enrollment", "SISSyncEvent"})
 
     def test_learning_contains_only_release1_models(self):
         model_names = {

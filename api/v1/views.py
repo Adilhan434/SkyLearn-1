@@ -33,6 +33,7 @@ class ApiV1RootView(APIView):
                     "courses": "/api/v1/courses/",
                     "course_templates": "/api/v1/course-templates/",
                     "student": "/api/v1/student/",
+                    "integrations": "/api/v1/integrations/",
                     "health": "/api/v1/health/",
                 },
             }
