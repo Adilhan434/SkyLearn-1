@@ -51,7 +51,7 @@
 | OpenAPI / Swagger | `DONE` | `/api/schema/`, `/api/docs/`, `/api/schema/redoc/` | `api/tests/test_openapi.py`; CLI schema validation | Все 50 Release 1 paths документируют security, permissions и errors; ключевые flows имеют explicit examples |
 | Unified API errors | `DONE` | `api.v1.exceptions.custom_exception_handler` | `api/tests/test_errors.py` и domain error tests | Отсутствующие credentials и неверные credentials намеренно имеют разные стабильные коды |
 | CI и coverage | `DONE` | `.github/workflows/django.yml`, `pylint.yml`, `.coveragerc` | CI выполняет check, migrations, schema, full tests, coverage и Pylint для всех Release 1 apps, включая `calendar_events` | GitHub-hosted прогон окончательно подтверждается после push |
-| Fresh database flow | `PENDING` | `migrate -> seed_release1 -> check/runserver` | Будет проверено на чистой PostgreSQL database | Нужен отдельный финальный прогон без ручных изменений |
+| Fresh database flow | `DONE` | `migrate -> seed_release1 -> check -> health` | Проверено на изолированной чистой PostgreSQL 18.3 database; повторный seed сохранил стабильные counts | Временная verification database удалена после успешного прогона |
 | Security/secrets audit | `PENDING` | settings, environment, repository history/worktree | Запланирован отдельный scan | Финальный аудит перед PR ещё не выполнен |
 | Full regression and Definition of Done | `PENDING` | Полный Release 1 backend | `python manage.py test`, coverage, OpenAPI, lint | Выполняется после оставшихся Swagger/error/CI задач |
 
@@ -87,7 +87,6 @@ Legacy apps `finance`, `attendance`, `result`, parent flows и их данные
 
 ## Что осталось перед Pull Request
 
-1. Проверить fresh PostgreSQL database flow.
-2. Выполнить secrets/security audit.
-3. Запустить полный набор tests, coverage, migrations, OpenAPI и lint.
-4. Создать Pull Request в `develop`.
+1. Выполнить secrets/security audit.
+2. Запустить полный набор tests, coverage, migrations, OpenAPI и lint.
+3. Создать Pull Request в `develop`.
