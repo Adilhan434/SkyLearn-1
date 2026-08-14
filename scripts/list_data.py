@@ -2,9 +2,9 @@ from bootstrap import setup_django
 
 setup_django()
 
-from accounts.models import Lecturer, Student, Group
+from accounts.models import Group, Lecturer
 from core.models import Course, AcademicYear
-from attendance.models import ScheduleItem, LessonTime
+from attendance.models import LessonTime
 
 print("--- Lecturers ---")
 for l in Lecturer.objects.all():

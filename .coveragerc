@@ -1,0 +1,19 @@
+[run]
+source =
+    api
+    accounts.api.v1
+    accounts.authentication
+    audit
+    courses
+    enrollments
+    learning
+    organization
+    progress
+omit =
+    */migrations/*
+    */tests/*
+
+[report]
+fail_under = 80
+show_missing = true
+skip_empty = true
