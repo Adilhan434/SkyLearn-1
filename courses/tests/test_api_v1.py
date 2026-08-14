@@ -108,16 +108,30 @@ class CourseAPITests(APITestCase):
             {"count", "next", "previous", "results"},
         )
         self.assertEqual(response.data["count"], 1)
+        item = response.data["results"][0]
         self.assertEqual(
-            response.data["results"][0],
+            set(item),
             {
-                "id": self.course.pk,
-                "title": self.course.title,
-                "code": self.course.code,
-                "status": CourseStatus.DRAFT,
-                "credits": 5,
+                "id",
+                "title",
+                "code",
+                "status",
+                "language",
+                "credits",
+                "semester",
+                "teacher",
+                "faculty",
+                "department",
+                "program",
+                "cover",
+                "start_date",
+                "end_date",
+                "updated_at",
             },
         )
+        self.assertEqual(item["semester"]["name"], "Fall 2026")
+        self.assertEqual(item["faculty"]["code"], "ENG")
+        self.assertIsNone(item["teacher"])
 
     def test_list_is_paginated(self):
         for number in range(2, 23):
@@ -190,7 +204,11 @@ class CourseAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_teacher_list_contains_only_assigned_courses(self):
-        teacher = get_user_model().objects.create_user(username="course-teacher")
+        teacher = get_user_model().objects.create_user(
+            username="course-teacher",
+            first_name="Teacher",
+            last_name="Demo",
+        )
         teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
         self.create_course(code="UNASSIGNED-COURSE")
         CourseTeachingAssignment.objects.create(
@@ -206,6 +224,10 @@ class CourseAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], self.course.pk)
+        self.assertEqual(
+            response.data["results"][0]["teacher"],
+            {"id": teacher.pk, "full_name": "Teacher Demo"},
+        )
 
     def test_assistant_list_contains_only_assigned_courses(self):
         assistant = get_user_model().objects.create_user(
@@ -291,6 +313,174 @@ class CourseAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.course.pk)
         self.assertEqual(response.data["code"], self.course.code)
+
+    def test_content_manager_can_patch_course_and_updates_actor(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {"title": "Updated Course"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.course.refresh_from_db()
+        self.assertEqual(self.course.title, "Updated Course")
+        self.assertEqual(self.course.updated_by, self.user)
+
+    def test_teacher_can_patch_assigned_draft_course(self):
+        teacher = get_user_model().objects.create_user(username="editing-teacher")
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        self.client.force_authenticate(teacher)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {"description": "Teacher update"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.course.refresh_from_db()
+        self.assertEqual(self.course.description, "Teacher update")
+        self.assertEqual(self.course.updated_by, teacher)
+
+    def test_teacher_cannot_patch_assigned_under_review_course(self):
+        self.course.status = CourseStatus.UNDER_REVIEW
+        self.course.save(update_fields=("status",))
+        teacher = get_user_model().objects.create_user(
+            username="review-course-teacher"
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        self.client.force_authenticate(teacher)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {"title": "Forbidden update"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.course.refresh_from_db()
+        self.assertNotEqual(self.course.title, "Forbidden update")
+
+    def test_teacher_cannot_patch_unassigned_course(self):
+        teacher = get_user_model().objects.create_user(
+            username="foreign-edit-teacher"
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(teacher)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {"title": "Foreign update"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_assistant_cannot_patch_course_without_edit_permission(self):
+        assistant = get_user_model().objects.create_user(username="edit-assistant")
+        assistant.roles.add(
+            Role.objects.get(code=RoleCode.TEACHING_ASSISTANT)
+        )
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=assistant,
+            role=CourseTeachingRole.TEACHING_ASSISTANT,
+        )
+        self.client.force_authenticate(assistant)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {"title": "Assistant update"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_regular_patch_cannot_change_course_status(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {"status": CourseStatus.PUBLISHED},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.course.refresh_from_db()
+        self.assertEqual(self.course.status, CourseStatus.DRAFT)
+
+    def test_archived_course_cannot_be_patched(self):
+        self.course.status = CourseStatus.ARCHIVED
+        self.course.save(update_fields=("status",))
+        self.client.force_authenticate(self.staff)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {"title": "Archived update"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_content_manager_can_delete_draft_course(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.delete(f"{self.list_url}{self.course.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Course.objects.filter(pk=self.course.pk).exists())
+
+    def test_published_course_cannot_be_permanently_deleted(self):
+        self.course.status = CourseStatus.PUBLISHED
+        self.course.save(update_fields=("status",))
+        self.client.force_authenticate(self.user)
+
+        response = self.client.delete(f"{self.list_url}{self.course.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Course.objects.filter(pk=self.course.pk).exists())
+
+    def test_teacher_cannot_delete_course_without_delete_permission(self):
+        teacher = get_user_model().objects.create_user(
+            username="deleting-teacher"
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        self.client.force_authenticate(teacher)
+
+        response = self.client.delete(f"{self.list_url}{self.course.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_put_is_not_supported(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.put(
+            f"{self.list_url}{self.course.pk}/",
+            self.valid_payload(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
     def test_unknown_course_returns_not_found(self):
         self.client.force_authenticate(self.user)

@@ -1,20 +1,131 @@
 from django.db import transaction
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from accounts.models import RoleCode
+from accounts.models import RoleCode, User
 from courses.models import Course, CourseTeachingAssignment, CourseTeachingRole
+from organization.models import Department, Faculty, Program, Semester
 
 
-class CourseListSerializer(serializers.ModelSerializer):
+class SemesterSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Semester
+        fields = ("id", "name")
+
+
+class FacultySummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Faculty
+        fields = ("id", "name", "code")
+
+
+class DepartmentSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Department
+        fields = ("id", "name", "code")
+
+
+class ProgramSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Program
+        fields = ("id", "name", "code")
+
+
+class TeacherSummarySerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ("id", "full_name")
+
+    def get_full_name(self, obj) -> str:
+        return obj.get_full_name().strip()
+
+
+class PrimaryTeacherMixin:
+    @extend_schema_field(TeacherSummarySerializer(allow_null=True))
+    def get_teacher(self, obj):
+        assignments = getattr(obj, "primary_teacher_assignments", None)
+        if assignments is None:
+            assignment = (
+                obj.teaching_assignments.filter(
+                    role=CourseTeachingRole.TEACHER,
+                    is_primary=True,
+                )
+                .select_related("user")
+                .first()
+            )
+        else:
+            assignment = assignments[0] if assignments else None
+        if assignment is None:
+            return None
+        return TeacherSummarySerializer(assignment.user).data
+
+
+class CourseListSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
+    teacher = serializers.SerializerMethodField()
+    semester = SemesterSummarySerializer(read_only=True)
+    faculty = FacultySummarySerializer(read_only=True)
+    department = DepartmentSummarySerializer(read_only=True)
+    program = ProgramSummarySerializer(read_only=True)
+
     class Meta:
         model = Course
-        fields = ("id", "title", "code", "status", "credits")
+        fields = (
+            "id",
+            "title",
+            "code",
+            "status",
+            "language",
+            "credits",
+            "semester",
+            "teacher",
+            "faculty",
+            "department",
+            "program",
+            "cover",
+            "start_date",
+            "end_date",
+            "updated_at",
+        )
 
 
-class CourseDetailSerializer(serializers.ModelSerializer):
+class CourseDetailSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
+    teacher = serializers.SerializerMethodField()
+    semester = SemesterSummarySerializer(read_only=True)
+    faculty = FacultySummarySerializer(read_only=True)
+    department = DepartmentSummarySerializer(read_only=True)
+    program = ProgramSummarySerializer(read_only=True)
     created_by = serializers.PrimaryKeyRelatedField(read_only=True)
     updated_by = serializers.PrimaryKeyRelatedField(read_only=True)
 
+    class Meta:
+        model = Course
+        fields = (
+            "id",
+            "title",
+            "code",
+            "description",
+            "language",
+            "credits",
+            "semester",
+            "teacher",
+            "faculty",
+            "department",
+            "program",
+            "status",
+            "start_date",
+            "end_date",
+            "cover",
+            "syllabus",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
+
+
+class CourseWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
         fields = (
@@ -40,6 +151,7 @@ class CourseDetailSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "id",
+            "status",
             "created_by",
             "updated_by",
             "created_at",
@@ -47,11 +159,21 @@ class CourseDetailSerializer(serializers.ModelSerializer):
         )
 
     def validate(self, attrs):
-        start_date = attrs.get("start_date")
-        end_date = attrs.get("end_date")
-        faculty = attrs.get("faculty")
-        department = attrs.get("department")
-        program = attrs.get("program")
+        instance = self.instance
+        start_date = attrs.get(
+            "start_date",
+            getattr(instance, "start_date", None),
+        )
+        end_date = attrs.get(
+            "end_date",
+            getattr(instance, "end_date", None),
+        )
+        faculty = attrs.get("faculty", getattr(instance, "faculty", None))
+        department = attrs.get(
+            "department",
+            getattr(instance, "department", None),
+        )
+        program = attrs.get("program", getattr(instance, "program", None))
         errors = {}
 
         if start_date and end_date and end_date < start_date:
@@ -86,3 +208,10 @@ class CourseDetailSerializer(serializers.ModelSerializer):
                 updated_by=user,
             )
         return course
+
+    def update(self, instance, validated_data):
+        instance.updated_by = self.context["request"].user
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        return instance
