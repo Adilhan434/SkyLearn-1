@@ -37,6 +37,10 @@ Course Structure writes append create, update and delete events for Module,
 Topic and Lesson objects. A confirmed cascade delete records a snapshot event
 for every nested Topic and Lesson before the database rows are removed.
 
+Creating a file or link material appends `material_uploaded`; direct and
+cascade deletion append `material_deleted`. History details contain the public
+material type only and never expose storage paths, file contents or URLs.
+
 ## Using the model
 
 ```python

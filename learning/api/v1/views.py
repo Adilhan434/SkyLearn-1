@@ -63,6 +63,18 @@ class LessonIsRequired(CodedAPIException):
     default_detail = "Lesson is required by another lesson."
 
 
+def record_material_event(material, action, actor):
+    record_course_history_event(
+        course=material.course,
+        action=action,
+        actor=actor,
+        object_type=CourseHistoryObjectType.MATERIAL,
+        object_id=material.pk,
+        object_title=material.title,
+        details={"material_type": material.type},
+    )
+
+
 def course_structure_queryset():
     lessons = Lesson.objects.select_related("required_lesson").order_by(
         "order",
@@ -139,6 +151,12 @@ class CourseModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
             release_type=ReleaseType.ALWAYS,
             release_at=None,
         )
+        for material in LearningMaterial.objects.filter(lesson__in=module_lessons):
+            record_material_event(
+                material,
+                CourseHistoryAction.MATERIAL_DELETED,
+                request.user,
+            )
         for lesson in module_lessons:
             record_course_history_event(
                 course=instance.course,
@@ -224,6 +242,12 @@ class CourseTopicDetailView(generics.RetrieveUpdateDestroyAPIView):
             release_type=ReleaseType.ALWAYS,
             release_at=None,
         )
+        for material in LearningMaterial.objects.filter(lesson__in=topic_lessons):
+            record_material_event(
+                material,
+                CourseHistoryAction.MATERIAL_DELETED,
+                request.user,
+            )
         for lesson in topic_lessons:
             record_course_history_event(
                 course=instance.module.course,
@@ -288,6 +312,12 @@ class LessonDetailView(generics.RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         if instance.dependent_lessons.exists():
             raise LessonIsRequired()
+        for material in instance.materials.all():
+            record_material_event(
+                material,
+                CourseHistoryAction.MATERIAL_DELETED,
+                request.user,
+            )
         record_course_history_event(
             course=instance.topic.module.course,
             action=CourseHistoryAction.LESSON_DELETED,
@@ -360,13 +390,19 @@ class LessonMaterialListCreateView(generics.ListCreateAPIView):
         context["lesson"] = self.get_lesson()
         return context
 
+    @transaction.atomic
     def perform_create(self, serializer):
         lesson = self.get_lesson()
-        serializer.save(
+        material = serializer.save(
             lesson=lesson,
             course=lesson.course,
             created_by=self.request.user,
             updated_by=self.request.user,
+        )
+        record_material_event(
+            material,
+            CourseHistoryAction.MATERIAL_UPLOADED,
+            self.request.user,
         )
 
 
@@ -379,6 +415,15 @@ class LearningMaterialDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        record_material_event(
+            instance,
+            CourseHistoryAction.MATERIAL_DELETED,
+            self.request.user,
+        )
+        instance.delete()
 
 
 class CourseMaterialListView(generics.ListAPIView):

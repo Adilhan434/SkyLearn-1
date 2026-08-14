@@ -11,6 +11,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import Role, RoleCode
+from audit.models import CourseHistoryAction, CourseHistoryEvent
 from config.storage_backends import PrivateFileSystemStorage
 from courses.models import (
     Course,
@@ -205,6 +206,17 @@ class LearningMaterialAPITests(APITestCase):
         self.assertEqual(material.created_by, self.manager)
         self.assertNotIn("file", response.data)
         self.assertEqual(response.data["download_url"], self.download_url(material))
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.MATERIAL_UPLOADED,
+            object_id=material.pk,
+        )
+        self.assertEqual(event.actor, self.manager)
+        self.assertEqual(event.object_title, material.title)
+        self.assertEqual(
+            event.details,
+            {"material_type": LearningMaterialType.PDF},
+        )
 
     def test_manager_creates_external_link(self):
         self.client.force_authenticate(self.manager)
@@ -322,12 +334,20 @@ class LearningMaterialAPITests(APITestCase):
 
     def test_manager_can_delete_material(self):
         material = self.create_file_material()
+        material_id = material.pk
         self.client.force_authenticate(self.manager)
 
         response = self.client.delete(self.detail_url(material))
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(LearningMaterial.objects.filter(pk=material.pk).exists())
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.MATERIAL_DELETED,
+            object_id=material_id,
+        )
+        self.assertEqual(event.actor, self.manager)
+        self.assertEqual(event.object_title, "Handbook")
 
     def test_unassigned_teacher_cannot_access_material_by_id(self):
         material = self.create_file_material()

@@ -12,7 +12,15 @@ from courses.models import (
     CourseTeachingAssignment,
     CourseTeachingRole,
 )
-from learning.models import CourseModule, CourseTopic, Lesson, LessonType, ReleaseType
+from learning.models import (
+    CourseModule,
+    CourseTopic,
+    LearningMaterial,
+    LearningMaterialType,
+    Lesson,
+    LessonType,
+    ReleaseType,
+)
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
@@ -1030,6 +1038,14 @@ class CourseStructureAPITests(APITestCase):
         structure = self.create_structure()
         lesson = structure["second_lesson"]
         lesson_id = lesson.pk
+        material = LearningMaterial.objects.create(
+            lesson=lesson,
+            course=self.course,
+            title="Cascade material",
+            type=LearningMaterialType.EXTERNAL_LINK,
+            external_url="https://example.invalid/material",
+        )
+        material_id = material.pk
         self.client.force_authenticate(self.manager)
 
         response = self.client.delete(self.lesson_detail_url(lesson))
@@ -1043,6 +1059,13 @@ class CourseStructureAPITests(APITestCase):
         )
         self.assertEqual(event.actor, self.manager)
         self.assertEqual(event.object_title, lesson.title)
+        material_event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.MATERIAL_DELETED,
+            object_id=material_id,
+        )
+        self.assertEqual(material_event.actor, self.manager)
+        self.assertEqual(material_event.object_title, "Cascade material")
 
     def test_required_lesson_cannot_be_deleted(self):
         structure = self.create_structure()
