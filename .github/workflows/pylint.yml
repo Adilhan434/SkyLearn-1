@@ -30,6 +30,9 @@ jobs:
             api \
             accounts/api/v1 \
             accounts/authentication.py \
+            accounts/models.py \
+            accounts/permission_defaults.py \
+            accounts/management/commands/seed_release1.py \
             audit \
             config/database.py \
             courses \

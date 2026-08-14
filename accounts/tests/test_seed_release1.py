@@ -5,6 +5,8 @@ from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
 from accounts.models import (
+    LMSPermission,
+    LMSPermissionCode,
     Lecturer,
     Role,
     RoleCode,
@@ -46,6 +48,10 @@ class SeedRelease1CommandTests(TestCase):
             },
         )
         self.assertIn("Release 1 demo data is ready", output)
+        self.assertSetEqual(
+            set(LMSPermission.objects.values_list("code", flat=True)),
+            set(LMSPermissionCode.values),
+        )
 
     def test_demo_users_have_expected_roles_flags_and_password(self):
         self.run_seed()
@@ -96,6 +102,7 @@ class SeedRelease1CommandTests(TestCase):
             "roles": Role.objects.count(),
             "students": Student.objects.count(),
             "lecturers": Lecturer.objects.count(),
+            "permissions": LMSPermission.objects.count(),
         }
 
         self.run_seed()
@@ -112,6 +119,23 @@ class SeedRelease1CommandTests(TestCase):
         self.assertEqual(Role.objects.count(), counts["roles"])
         self.assertEqual(Student.objects.count(), counts["students"])
         self.assertEqual(Lecturer.objects.count(), counts["lecturers"])
+        self.assertEqual(
+            LMSPermission.objects.count(),
+            counts["permissions"],
+        )
+
+    def test_command_restores_default_role_permissions(self):
+        teacher_role = Role.objects.get(code=RoleCode.TEACHER)
+        teacher_role.permissions.clear()
+
+        self.run_seed()
+
+        self.assertTrue(
+            teacher_role.permissions.filter(code="courses.edit").exists()
+        )
+        self.assertFalse(
+            teacher_role.permissions.filter(code="courses.publish").exists()
+        )
 
     def test_custom_demo_password_is_supported(self):
         self.run_seed(password="DifferentDemo123!")

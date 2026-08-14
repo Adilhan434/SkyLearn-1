@@ -107,7 +107,12 @@ class AuthV1Tests(APITestCase):
                 "full_name": "Student Demo",
                 "is_active": True,
                 "roles": ["student"],
-                "permissions": [],
+                "permissions": [
+                    "calendar.view",
+                    "course_structure.view",
+                    "courses.view",
+                    "materials.view",
+                ],
                 "profile": {
                     "student_id": "SU-2024-0012",
                     "group": "CS-22-24",
@@ -123,6 +128,11 @@ class AuthV1Tests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["roles"], ["student", "teacher"])
+        self.assertIn("courses.edit", response.json()["permissions"])
+        self.assertEqual(
+            response.json()["permissions"],
+            sorted(response.json()["permissions"]),
+        )
 
     def test_me_allows_missing_email_and_non_student_profile(self):
         user = User.objects.create_user(

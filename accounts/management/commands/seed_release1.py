@@ -4,12 +4,15 @@ from django.db import transaction
 
 from accounts.models import (
     Group,
+    LMSPermission,
+    LMSPermissionCode,
     Lecturer,
     Role,
     RoleCode,
     Student,
     User,
 )
+from accounts.permission_defaults import RELEASE1_ROLE_PERMISSIONS
 from core.models import Program
 
 
@@ -69,6 +72,7 @@ class Command(BaseCommand):
             )
 
         roles = self._ensure_roles()
+        self._ensure_permissions(roles)
         users = {
             config["role"]: self._ensure_user(
                 config,
@@ -95,6 +99,24 @@ class Command(BaseCommand):
             )
             roles[code] = role
         return roles
+
+    def _ensure_permissions(self, roles):
+        permissions = {}
+        for code, label in LMSPermissionCode.choices:
+            permission, _ = LMSPermission.objects.update_or_create(
+                code=code,
+                defaults={"name": str(label)},
+            )
+            permissions[code] = permission
+
+        all_permissions = list(permissions.values())
+        for role_code, permission_codes in RELEASE1_ROLE_PERMISSIONS.items():
+            selected = (
+                all_permissions
+                if permission_codes == "*"
+                else [permissions[code] for code in permission_codes]
+            )
+            roles[role_code].permissions.set(selected)
 
     def _ensure_user(self, config, role, password):
         matches = User.objects.filter(email__iexact=config["email"])

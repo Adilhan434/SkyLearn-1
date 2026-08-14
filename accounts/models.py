@@ -1,12 +1,8 @@
 from django.db import models
 from django.urls import reverse
-from django.contrib.auth.models import AbstractUser, UserManager
+from django.contrib.auth.models import AbstractUser
 from config import settings
 from django.utils.translation import gettext_lazy as _
-from django.db.models import Q
-import random
-import string
-from .validators import ASCIIUsernameValidator
 
 
 
@@ -30,10 +26,56 @@ class RoleCode(models.TextChoices):
     SUPER_ADMIN = "super_admin", _("Super Admin")
 
 
+class LMSPermissionCode(models.TextChoices):
+    COURSES_VIEW = "courses.view", _("View courses")
+    COURSES_CREATE = "courses.create", _("Create courses")
+    COURSES_EDIT = "courses.edit", _("Edit courses")
+    COURSES_DELETE = "courses.delete", _("Delete courses")
+    COURSES_SUBMIT_REVIEW = "courses.submit_review", _("Submit courses for review")
+    COURSES_REVIEW = "courses.review", _("Review courses")
+    COURSES_PUBLISH = "courses.publish", _("Publish courses")
+    COURSES_ARCHIVE = "courses.archive", _("Archive courses")
+    COURSES_COPY = "courses.copy", _("Copy courses")
+    COURSE_STRUCTURE_VIEW = "course_structure.view", _("View course structure")
+    COURSE_STRUCTURE_MANAGE = "course_structure.manage", _("Manage course structure")
+    MATERIALS_VIEW = "materials.view", _("View learning materials")
+    MATERIALS_UPLOAD = "materials.upload", _("Upload learning materials")
+    MATERIALS_EDIT = "materials.edit", _("Edit learning materials")
+    MATERIALS_DELETE = "materials.delete", _("Delete learning materials")
+    ENROLLMENTS_VIEW = "enrollments.view", _("View enrollments")
+    ENROLLMENTS_MANAGE = "enrollments.manage", _("Manage enrollments")
+    CALENDAR_VIEW = "calendar.view", _("View calendar")
+    CALENDAR_MANAGE = "calendar.manage", _("Manage calendar")
+
+
+class LMSPermission(models.Model):
+    code = models.CharField(
+        max_length=100,
+        choices=LMSPermissionCode.choices,
+        unique=True,
+    )
+    name = models.CharField(max_length=150)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("code",)
+        verbose_name = "LMS permission"
+        verbose_name_plural = "LMS permissions"
+
+    def __str__(self):
+        return self.code
+
+
 class Role(models.Model):
     code = models.CharField(max_length=50, choices=RoleCode.choices, unique=True)
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    permissions = models.ManyToManyField(
+        LMSPermission,
+        through="RolePermission",
+        related_name="roles",
+        blank=True,
+    )
 
     class Meta:
         ordering = ("code",)
@@ -75,6 +117,23 @@ class User(AbstractUser):
     def get_full_name(self):
         return f"{self.first_name} {self.last_name}"
 
+    def get_lms_permissions(self):
+        if self.is_superuser:
+            return set(LMSPermission.objects.values_list("code", flat=True))
+        return set(
+            LMSPermission.objects.filter(roles__users=self)
+            .values_list("code", flat=True)
+            .distinct()
+        )
+
+    def has_lms_permission(self, permission_code):
+        if self.is_superuser:
+            return True
+        return LMSPermission.objects.filter(
+            code=permission_code,
+            roles__users=self,
+        ).exists()
+
 
 class UserRole(models.Model):
     user = models.ForeignKey(
@@ -102,6 +161,34 @@ class UserRole(models.Model):
 
     def __str__(self):
         return f"{self.user} — {self.role.code}"
+
+
+class RolePermission(models.Model):
+    role = models.ForeignKey(
+        Role,
+        on_delete=models.CASCADE,
+        related_name="role_permissions",
+    )
+    permission = models.ForeignKey(
+        LMSPermission,
+        on_delete=models.CASCADE,
+        related_name="role_permissions",
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("role__code", "permission__code")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("role", "permission"),
+                name="unique_role_lms_permission",
+            )
+        ]
+        verbose_name = "Role permission"
+        verbose_name_plural = "Role permissions"
+
+    def __str__(self):
+        return f"{self.role.code} - {self.permission.code}"
 
 
 class Lecturer(models.Model):
