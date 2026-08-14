@@ -81,3 +81,34 @@ class StructureObjectPermission(BasePermission):
         if request.method == "GET":
             return has_access
         return has_access and can_edit_structure(request.user, course)
+
+
+class MaterialPermission(BasePermission):
+    """Apply material permissions together with course ownership checks."""
+
+    message = "Learning material access is not allowed."
+    permission_by_method = {
+        "GET": LMSPermissionCode.MATERIALS_VIEW,
+        "POST": LMSPermissionCode.MATERIALS_UPLOAD,
+        "PATCH": LMSPermissionCode.MATERIALS_EDIT,
+        "PUT": LMSPermissionCode.MATERIALS_EDIT,
+        "DELETE": LMSPermissionCode.MATERIALS_DELETE,
+    }
+
+    def has_permission(self, request, view):
+        permission_code = self.permission_by_method.get(request.method)
+        return bool(
+            has_course_management_role(request.user)
+            and permission_code
+            and request.user.has_lms_permission(permission_code)
+        )
+
+    def has_object_permission(self, request, view, obj):
+        course = structure_course_for(obj)
+        has_access = courses_accessible_to(
+            request.user,
+            Course.objects.filter(pk=course.pk),
+        ).exists()
+        if request.method == "GET":
+            return has_access
+        return has_access and can_edit_structure(request.user, course)

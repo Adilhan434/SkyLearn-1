@@ -184,6 +184,13 @@ The versioned API is mounted in `api.v1.urls`:
 | `GET /api/v1/lessons/{id}/` | Retrieve lesson metadata and content | Structure-view permission |
 | `PATCH /api/v1/lessons/{id}/` | Update lesson and release conditions | Structure-manage permission |
 | `DELETE /api/v1/lessons/{id}/` | Delete an unreferenced lesson | Structure-manage permission |
+| `GET /api/v1/lessons/{id}/materials/` | List lesson materials | Materials-view permission |
+| `POST /api/v1/lessons/{id}/materials/` | Upload a file or add a link | Materials-upload permission |
+| `GET /api/v1/materials/{id}/` | Retrieve material metadata | Materials-view permission |
+| `PATCH /api/v1/materials/{id}/` | Update material metadata or source | Materials-edit permission |
+| `DELETE /api/v1/materials/{id}/` | Delete a material record | Materials-delete permission |
+| `GET /api/v1/materials/{id}/download/` | Permission-checked file download | Materials-view permission and download policy |
+| `GET /api/v1/courses/{id}/materials/` | Search and filter all course materials | Materials-view permission |
 | `POST /api/v1/courses/{id}/submit-review/` | Submit Draft/Needs Revision course | Submit-review permission |
 | `POST /api/v1/courses/{id}/return-for-revision/` | Return Under Review course with a comment | Review permission |
 | `POST /api/v1/courses/{id}/publish/` | Publish an Under Review course | Publish permission |
@@ -228,6 +235,13 @@ module and lesson dates, previous-module completion, previous-lesson completion
 and explicit lesson prerequisites, and returns `is_available` plus a stable
 `lock_reason`. The caller supplies completed lesson IDs; the Student Course API
 will source them from `LessonProgress` when the progress domain is introduced.
+
+Material responses expose metadata, an external URL where applicable and a
+protected `download_url`; the underlying storage path is write-only. Course
+material filtering supports `search`, `type`, `lesson` and `module`. All
+operations require both the corresponding `materials.*` permission and object
+access to the owning course. Writes also follow the course editability rules,
+and downloads enforce `download_allowed` before opening the storage object.
 
 ## 6. Database and runtime
 

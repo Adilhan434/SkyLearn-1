@@ -6,6 +6,9 @@ from .views import (
     CourseTopicDetailView,
     LessonCreateView,
     LessonDetailView,
+    LearningMaterialDetailView,
+    LearningMaterialDownloadView,
+    LessonMaterialListCreateView,
 )
 
 
@@ -25,4 +28,19 @@ urlpatterns = [
         name="lesson-create",
     ),
     path("lessons/<int:pk>/", LessonDetailView.as_view(), name="lesson-detail"),
+    path(
+        "lessons/<int:lesson_pk>/materials/",
+        LessonMaterialListCreateView.as_view(),
+        name="lesson-material-list-create",
+    ),
+    path(
+        "materials/<int:pk>/",
+        LearningMaterialDetailView.as_view(),
+        name="material-detail",
+    ),
+    path(
+        "materials/<int:pk>/download/",
+        LearningMaterialDownloadView.as_view(),
+        name="material-download",
+    ),
 ]

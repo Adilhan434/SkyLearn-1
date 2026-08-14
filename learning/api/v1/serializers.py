@@ -1,11 +1,19 @@
+import mimetypes
+from pathlib import Path
+
 from django.db import transaction
 from django.db.models import Max
+from django.urls import reverse
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from courses.models import Course
 from learning.models import (
     CourseModule,
     CourseTopic,
+    LearningMaterial,
+    LearningMaterialType,
     Lesson,
     LessonType,
     ReleaseType,
@@ -434,3 +442,143 @@ class StructureReorderSerializer(serializers.Serializer):
                 "Order values must form a continuous sequence from 1."
             )
         return items
+
+
+class LearningMaterialSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(write_only=True, required=False)
+    download_allowed = serializers.BooleanField(required=False, default=True)
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LearningMaterial
+        fields = (
+            "id",
+            "lesson",
+            "course",
+            "title",
+            "description",
+            "type",
+            "file",
+            "external_url",
+            "original_filename",
+            "mime_type",
+            "size",
+            "extension",
+            "download_allowed",
+            "download_url",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "lesson",
+            "course",
+            "original_filename",
+            "mime_type",
+            "size",
+            "extension",
+            "download_url",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        )
+
+    @extend_schema_field(OpenApiTypes.URI)
+    def get_download_url(self, obj):
+        if not obj.file or not obj.download_allowed:
+            return None
+        return reverse(
+            "api-v1:learning-v1:material-download",
+            kwargs={"pk": obj.pk},
+        )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        instance = self.instance
+        material_type = attrs.get(
+            "type",
+            instance.type if instance is not None else None,
+        )
+        is_link = material_type in {
+            LearningMaterialType.EXTERNAL_LINK,
+            LearningMaterialType.LIBRARY_LINK,
+        }
+        external_url = attrs.get(
+            "external_url",
+            instance.external_url if instance is not None else "",
+        )
+        uploaded_file = attrs.get(
+            "file",
+            instance.file if instance is not None else None,
+        )
+
+        if is_link:
+            if not external_url:
+                raise serializers.ValidationError(
+                    {"external_url": "A link material requires external_url."}
+                )
+            if "file" in attrs:
+                raise serializers.ValidationError(
+                    {"file": "A link material cannot contain a file."}
+                )
+        else:
+            if not uploaded_file:
+                raise serializers.ValidationError(
+                    {"file": "A file material requires a file."}
+                )
+            if attrs.get("external_url"):
+                raise serializers.ValidationError(
+                    {"external_url": "A file material cannot contain a URL."}
+                )
+        return attrs
+
+    @staticmethod
+    def _set_file_metadata(validated_data, uploaded_file):
+        original_name = Path(uploaded_file.name).name
+        guessed_type, _encoding = mimetypes.guess_type(original_name)
+        validated_data.update(
+            original_filename=original_name,
+            mime_type=getattr(uploaded_file, "content_type", "")
+            or guessed_type
+            or "application/octet-stream",
+            size=uploaded_file.size,
+            extension=Path(original_name).suffix.lower().lstrip("."),
+            external_url="",
+        )
+
+    def create(self, validated_data):
+        uploaded_file = validated_data.get("file")
+        if uploaded_file is not None:
+            self._set_file_metadata(validated_data, uploaded_file)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        uploaded_file = validated_data.get("file")
+        material_type = validated_data.get("type", instance.type)
+        if uploaded_file is not None:
+            self._set_file_metadata(validated_data, uploaded_file)
+        elif material_type in {
+            LearningMaterialType.EXTERNAL_LINK,
+            LearningMaterialType.LIBRARY_LINK,
+        }:
+            validated_data.update(
+                file="",
+                original_filename="",
+                mime_type="",
+                size=None,
+                extension="",
+            )
+        return super().update(instance, validated_data)
+
+
+class CourseMaterialFilterSerializer(serializers.Serializer):
+    search = serializers.CharField(required=False, allow_blank=True)
+    type = serializers.ChoiceField(
+        choices=LearningMaterialType.choices,
+        required=False,
+    )
+    lesson = serializers.IntegerField(required=False, min_value=1)
+    module = serializers.IntegerField(required=False, min_value=1)

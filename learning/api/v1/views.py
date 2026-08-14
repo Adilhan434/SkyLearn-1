@@ -1,25 +1,37 @@
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.response import Response
 
 from api.v1.exceptions import CodedAPIException
 from courses.models import Course
 from courses.permissions import CourseAccessPermission, courses_accessible_to
-from learning.models import CourseModule, CourseTopic, Lesson, ReleaseType
+from learning.models import (
+    CourseModule,
+    CourseTopic,
+    LearningMaterial,
+    Lesson,
+    ReleaseType,
+)
 from learning.permissions import (
+    MaterialPermission,
     StructureManagePermission,
     StructureObjectPermission,
 )
 from learning.reordering import reorder_structure
 
 from .serializers import (
+    CourseMaterialFilterSerializer,
     CourseModuleWriteSerializer,
     CourseStructureSerializer,
     CourseTopicWriteSerializer,
     DeleteConfirmationSerializer,
     LessonWriteSerializer,
+    LearningMaterialSerializer,
     StructureReorderSerializer,
 )
 
@@ -244,3 +256,134 @@ class StructureReorderView(generics.GenericAPIView):
         )
         reordered_course = course_structure_queryset().get(pk=course.pk)
         return Response(CourseStructureSerializer(reordered_course).data)
+
+
+def material_queryset_for(user):
+    return LearningMaterial.objects.select_related(
+        "course",
+        "lesson",
+        "lesson__topic",
+        "lesson__topic__module",
+    ).filter(course__in=courses_accessible_to(user))
+
+
+class LessonMaterialListCreateView(generics.ListCreateAPIView):
+    permission_classes = (MaterialPermission,)
+    serializer_class = LearningMaterialSerializer
+
+    def get_lesson(self):
+        lesson = get_object_or_404(
+            Lesson.objects.select_related("topic__module__course").filter(
+                topic__module__course__in=courses_accessible_to(
+                    self.request.user
+                )
+            ),
+            pk=self.kwargs["lesson_pk"],
+        )
+        self.check_object_permissions(self.request, lesson)
+        return lesson
+
+    def get_queryset(self):
+        return material_queryset_for(self.request.user).filter(
+            lesson=self.get_lesson()
+        )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["lesson"] = self.get_lesson()
+        return context
+
+    def perform_create(self, serializer):
+        lesson = self.get_lesson()
+        serializer.save(
+            lesson=lesson,
+            course=lesson.course,
+            created_by=self.request.user,
+            updated_by=self.request.user,
+        )
+
+
+class LearningMaterialDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = (MaterialPermission,)
+    serializer_class = LearningMaterialSerializer
+
+    def get_queryset(self):
+        return material_queryset_for(self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+
+class CourseMaterialListView(generics.ListAPIView):
+    permission_classes = (MaterialPermission,)
+    serializer_class = LearningMaterialSerializer
+
+    def get_course(self):
+        course = get_object_or_404(
+            courses_accessible_to(self.request.user),
+            pk=self.kwargs["pk"],
+        )
+        self.check_object_permissions(self.request, course)
+        return course
+
+    def get_queryset(self):
+        filter_serializer = CourseMaterialFilterSerializer(
+            data=self.request.query_params
+        )
+        filter_serializer.is_valid(raise_exception=True)
+        filters = filter_serializer.validated_data
+        queryset = material_queryset_for(self.request.user).filter(
+            course=self.get_course()
+        )
+        search = filters.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search)
+                | Q(description__icontains=search)
+                | Q(original_filename__icontains=search)
+            )
+        if "type" in filters:
+            queryset = queryset.filter(type=filters["type"])
+        if "lesson" in filters:
+            queryset = queryset.filter(lesson_id=filters["lesson"])
+        if "module" in filters:
+            queryset = queryset.filter(
+                lesson__topic__module_id=filters["module"]
+            )
+        return queryset
+
+
+class MaterialFileUnavailable(CodedAPIException):
+    error_code = "material_file_unavailable"
+    default_detail = "This material does not contain a downloadable file."
+
+
+class MaterialDownloadNotAllowed(CodedAPIException):
+    status_code = status.HTTP_403_FORBIDDEN
+    error_code = "material_download_not_allowed"
+    default_detail = "Downloading this material is not allowed."
+
+
+class LearningMaterialDownloadView(generics.GenericAPIView):
+    permission_classes = (MaterialPermission,)
+
+    @extend_schema(
+        responses={(200, "application/octet-stream"): OpenApiTypes.BINARY}
+    )
+    def get(self, request, *args, **kwargs):
+        del args, kwargs
+        material = get_object_or_404(
+            material_queryset_for(request.user),
+            pk=self.kwargs["pk"],
+        )
+        self.check_object_permissions(request, material)
+        if not material.download_allowed:
+            raise MaterialDownloadNotAllowed()
+        if not material.file:
+            raise MaterialFileUnavailable()
+        return FileResponse(
+            material.file.open("rb"),
+            as_attachment=True,
+            filename=material.original_filename or material.file.name,
+            content_type=material.mime_type or "application/octet-stream",
+        )

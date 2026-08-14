@@ -23,6 +23,10 @@ class OpenApiTests(APITestCase):
                 "/api/v1/users/",
                 "/api/v1/users/{id}/",
                 "/api/v1/roles/",
+                "/api/v1/lessons/{lesson_pk}/materials/",
+                "/api/v1/materials/{id}/",
+                "/api/v1/materials/{id}/download/",
+                "/api/v1/courses/{id}/materials/",
             }.issubset(schema["paths"])
         )
 
