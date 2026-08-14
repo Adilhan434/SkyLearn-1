@@ -1,6 +1,6 @@
 from rest_framework.permissions import BasePermission
 
-from accounts.models import LMSPermissionCode
+from accounts.models import LMSPermissionCode, RoleCode
 from courses.permissions import has_course_management_role
 
 
@@ -20,4 +20,21 @@ class EnrollmentPermission(BasePermission):
             has_course_management_role(user)
             and permission
             and user.has_lms_permission(permission)
+        )
+
+
+class StudentCoursePermission(BasePermission):
+    """Restrict the Student API to active users with the Student role."""
+
+    message = "Student course access is not allowed."
+
+    def has_permission(self, request, view):
+        del view
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and user.is_active
+            and user.roles.filter(code=RoleCode.STUDENT).exists()
+            and user.has_lms_permission(LMSPermissionCode.COURSES_VIEW)
         )

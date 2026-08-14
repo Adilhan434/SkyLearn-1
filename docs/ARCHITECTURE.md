@@ -154,6 +154,15 @@ object-level Course access. A duplicate active enrollment returns the stable
 `already_enrolled` error; posting a withdrawn, suspended or completed pair
 reactivates the existing record atomically.
 
+The Student Course query is centralized in
+`enrollments.querysets.student_courses_queryset`. It returns only Published
+courses for which the current user has an Active enrollment. Draft, Under
+Review, Archived, withdrawn and other students' courses therefore resolve to
+404 at the detail endpoint and never appear in the list. Student serializers
+exclude review, publication-owner and audit fields. Nested structure, lesson
+availability and progress are added by the dedicated Student Course Detail
+task.
+
 ## 4. Organization and Course relationships
 
 ```text
@@ -217,6 +226,8 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/{id}/copy/` | Copy course metadata and content into a new Draft | Copy permission and course access |
 | `GET /api/v1/courses/{id}/enrollments/` | Paginated course enrollment list | Enrollment-view permission and course access |
 | `POST /api/v1/courses/{id}/enrollments/` | Manually enroll or reactivate a Student | Enrollment-manage permission and course access |
+| `GET /api/v1/student/courses/` | Paginated courses available to the current Student | Student role and course-view permission |
+| `GET /api/v1/student/courses/{id}/` | Safe enrolled Course metadata | Student role and active enrollment |
 | `GET, POST /api/v1/course-templates/` | List active templates or snapshot an accessible course | Copy permission |
 | `GET /api/v1/course-templates/{id}/` | Retrieve active template metadata | Copy permission |
 | `POST /api/v1/course-templates/{id}/create-course/` | Create a new Draft from an active template | Copy and create permissions |

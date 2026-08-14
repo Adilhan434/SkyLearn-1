@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 from accounts.models import Role, RoleCode
 from courses.models import (
     Course,
+    CourseStatus,
     CourseTeachingAssignment,
     CourseTeachingRole,
 )
@@ -226,4 +227,183 @@ class EnrollmentAPITests(APITestCase):
         self.assertEqual(
             self.url(),
             f"/api/v1/courses/{self.course.pk}/enrollments/",
+        )
+
+
+class StudentCourseAPITests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.student = user_model.objects.create_user(
+            username="student-courses",
+            first_name="Student",
+            last_name="Demo",
+        )
+        self.student.roles.add(Role.objects.get(code=RoleCode.STUDENT))
+        self.other_student = user_model.objects.create_user(username="other-student")
+        self.other_student.roles.add(Role.objects.get(code=RoleCode.STUDENT))
+        self.teacher = user_model.objects.create_user(
+            username="student-course-teacher",
+            first_name="Teacher",
+            last_name="Demo",
+        )
+        self.teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        faculty = Faculty.objects.create(name="Engineering", code="ENG")
+        department = Department.objects.create(
+            faculty=faculty,
+            name="Computer Science",
+            code="CS",
+        )
+        program = Program.objects.create(
+            department=department,
+            name="Software Engineering",
+            code="SE",
+            degree_level=DegreeLevel.BACHELOR,
+        )
+        semester = Semester.objects.create(
+            name="Fall 2026",
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 12, 20),
+        )
+        self.course_values = {
+            "credits": 5,
+            "semester": semester,
+            "faculty": faculty,
+            "department": department,
+            "program": program,
+            "start_date": date(2026, 9, 1),
+            "end_date": date(2026, 12, 20),
+        }
+        self.published_course = self.create_course(
+            "Published Course",
+            "PUB-101",
+            CourseStatus.PUBLISHED,
+        )
+        CourseTeachingAssignment.objects.create(
+            course=self.published_course,
+            user=self.teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        Enrollment.objects.create(
+            student=self.student,
+            course=self.published_course,
+        )
+
+    def create_course(self, title, code, course_status):
+        return Course.objects.create(
+            title=title,
+            code=code,
+            status=course_status,
+            **self.course_values,
+        )
+
+    def list_url(self):
+        return reverse("api-v1:student-v1:course-list")
+
+    def detail_url(self, course):
+        return reverse(
+            "api-v1:student-v1:course-detail",
+            kwargs={"pk": course.pk},
+        )
+
+    def test_student_list_contains_only_own_active_published_courses(self):
+        withdrawn = self.create_course(
+            "Withdrawn Course",
+            "WITHDRAWN-1",
+            CourseStatus.PUBLISHED,
+        )
+        draft = self.create_course("Draft Course", "DRAFT-1", CourseStatus.DRAFT)
+        archived = self.create_course(
+            "Archived Course",
+            "ARCHIVED-1",
+            CourseStatus.ARCHIVED,
+        )
+        foreign = self.create_course(
+            "Foreign Course",
+            "FOREIGN-1",
+            CourseStatus.PUBLISHED,
+        )
+        Enrollment.objects.create(
+            student=self.student,
+            course=withdrawn,
+            status=EnrollmentStatus.WITHDRAWN,
+        )
+        Enrollment.objects.create(student=self.student, course=draft)
+        Enrollment.objects.create(student=self.student, course=archived)
+        Enrollment.objects.create(student=self.other_student, course=foreign)
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get(self.list_url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            set(response.data),
+            {"count", "next", "previous", "results"},
+        )
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.published_course.pk)
+
+    def test_student_course_response_exposes_safe_metadata(self):
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get(self.detail_url(self.published_course))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["code"], "PUB-101")
+        self.assertEqual(
+            response.data["teacher"],
+            {"id": self.teacher.pk, "full_name": "Teacher Demo"},
+        )
+        self.assertNotIn("review_comment", response.data)
+        self.assertNotIn("published_by", response.data)
+        self.assertNotIn("created_by", response.data)
+        self.assertNotIn("updated_by", response.data)
+
+    def test_unavailable_student_course_details_return_not_found(self):
+        draft = self.create_course("Draft Course", "DRAFT-2", CourseStatus.DRAFT)
+        withdrawn = self.create_course(
+            "Withdrawn Course",
+            "WITHDRAWN-2",
+            CourseStatus.PUBLISHED,
+        )
+        foreign = self.create_course(
+            "Foreign Course",
+            "FOREIGN-2",
+            CourseStatus.PUBLISHED,
+        )
+        Enrollment.objects.create(student=self.student, course=draft)
+        Enrollment.objects.create(
+            student=self.student,
+            course=withdrawn,
+            status=EnrollmentStatus.WITHDRAWN,
+        )
+        Enrollment.objects.create(student=self.other_student, course=foreign)
+        self.client.force_authenticate(self.student)
+
+        for course in (draft, withdrawn, foreign):
+            with self.subTest(course=course.code):
+                response = self.client.get(self.detail_url(course))
+                self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_student_course_api_requires_student_role_and_authentication(self):
+        anonymous_response = self.client.get(self.list_url())
+        non_student = get_user_model().objects.create_user(username="not-student")
+        self.client.force_authenticate(non_student)
+
+        forbidden_response = self.client.get(self.list_url())
+
+        self.assertEqual(
+            anonymous_response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+        self.assertEqual(
+            forbidden_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_student_course_routes_have_stable_names(self):
+        self.assertEqual(self.list_url(), "/api/v1/student/courses/")
+        self.assertEqual(
+            self.detail_url(self.published_course),
+            f"/api/v1/student/courses/{self.published_course.pk}/",
         )

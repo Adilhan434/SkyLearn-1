@@ -2,6 +2,14 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from accounts.models import RoleCode
+from courses.api.v1.serializers import (
+    DepartmentSummarySerializer,
+    FacultySummarySerializer,
+    PrimaryTeacherMixin,
+    ProgramSummarySerializer,
+    SemesterSummarySerializer,
+)
+from courses.models import Course
 from enrollments.models import Enrollment
 
 
@@ -48,3 +56,32 @@ class EnrollmentSerializer(serializers.ModelSerializer):
                 "Selected user must have the student role."
             )
         return student
+
+
+class StudentCourseSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
+    teacher = serializers.SerializerMethodField()
+    semester = SemesterSummarySerializer(read_only=True)
+    faculty = FacultySummarySerializer(read_only=True)
+    department = DepartmentSummarySerializer(read_only=True)
+    program = ProgramSummarySerializer(read_only=True)
+
+    class Meta:
+        model = Course
+        fields = (
+            "id",
+            "title",
+            "code",
+            "description",
+            "language",
+            "credits",
+            "semester",
+            "teacher",
+            "faculty",
+            "department",
+            "program",
+            "status",
+            "cover",
+            "syllabus",
+            "start_date",
+            "end_date",
+        )
