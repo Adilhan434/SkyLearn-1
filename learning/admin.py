@@ -1,8 +1,18 @@
+from django import forms
 from django.contrib import admin
+from django.db import models
 
 from audit.admin import AuditAdminMixin
 
 from .models import CourseModule, CourseTopic, LearningMaterial, Lesson
+
+
+class PrivateFileInput(forms.ClearableFileInput):
+    """Render a replacement input without requesting a private file URL."""
+
+    def is_initial(self, value):
+        del value
+        return False
 
 
 @admin.register(CourseModule)
@@ -37,6 +47,9 @@ class LessonAdmin(AuditAdminMixin, admin.ModelAdmin):
 
 @admin.register(LearningMaterial)
 class LearningMaterialAdmin(AuditAdminMixin, admin.ModelAdmin):
+    formfield_overrides = {
+        models.FileField: {"widget": PrivateFileInput},
+    }
     list_display = (
         "title",
         "course",

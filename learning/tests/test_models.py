@@ -14,6 +14,7 @@ from learning.admin import (
     CourseTopicAdmin,
     LearningMaterialAdmin,
     LessonAdmin,
+    PrivateFileInput,
 )
 from learning.models import (
     CourseModule,
@@ -344,3 +345,8 @@ class LearningStructureModelTests(TestCase):
             admin.site._registry[LearningMaterial],
             LearningMaterialAdmin,
         )
+
+    def test_private_material_admin_widget_does_not_request_file_url(self):
+        widget = PrivateFileInput()
+
+        self.assertFalse(widget.is_initial(object()))

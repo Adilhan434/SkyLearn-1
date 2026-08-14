@@ -30,7 +30,11 @@ django.template.context.BaseContext.__copy__ = fixed_base_context_copy
 from decouple import Csv, config
 from django.utils.translation import gettext_lazy as _
 from config.database import build_database_config
-from config.storage import build_storage_config, local_media_root
+from config.storage import (
+    build_storage_config,
+    local_media_root,
+    local_private_media_root,
+)
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -303,6 +307,10 @@ STATICFILES_FINDERS = [
 # Media files config
 MEDIA_URL = "/media/"
 MEDIA_ROOT = local_media_root(BASE_DIR)
+PRIVATE_MEDIA_ROOT = config(
+    "PRIVATE_MEDIA_ROOT",
+    default=local_private_media_root(BASE_DIR),
+) or local_private_media_root(BASE_DIR)
 USE_S3 = config("USE_S3", default=False, cast=bool)
 S3_ENDPOINT_URL = config("S3_ENDPOINT_URL", default="")
 S3_ACCESS_KEY = config("S3_ACCESS_KEY", default="")
@@ -324,6 +332,7 @@ STORAGES = build_storage_config(
     bucket=S3_BUCKET,
     region=S3_REGION,
     location=S3_LOCATION,
+    private_media_root=PRIVATE_MEDIA_ROOT,
     addressing_style=S3_ADDRESSING_STYLE,
     querystring_expire=S3_QUERYSTRING_EXPIRE,
 )

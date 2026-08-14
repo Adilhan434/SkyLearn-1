@@ -9,6 +9,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import Role, RoleCode
+from config.storage_backends import PrivateFileSystemStorage
 from courses.models import (
     Course,
     CourseTeachingAssignment,
@@ -30,9 +31,18 @@ PDF_CONTENT = b"%PDF-1.4\nprotected content\n%%EOF"
 class LearningMaterialAPITests(APITestCase):
     def setUp(self):
         self.media_directory = TemporaryDirectory()
-        self.media_override = override_settings(
-            MEDIA_ROOT=self.media_directory.name
+        material_file_field = LearningMaterial._meta.get_field("file")
+        original_storage = material_file_field.storage
+        material_file_field.storage = PrivateFileSystemStorage(
+            location=self.media_directory.name
         )
+        self.addCleanup(
+            setattr,
+            material_file_field,
+            "storage",
+            original_storage,
+        )
+        self.media_override = override_settings(MEDIA_ROOT=self.media_directory.name)
         self.media_override.enable()
         self.addCleanup(self.media_override.disable)
         self.addCleanup(self.media_directory.cleanup)
@@ -408,6 +418,45 @@ class LearningMaterialAPITests(APITestCase):
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertIn("download.pdf", response["Content-Disposition"])
         self.assertEqual(body, PDF_CONTENT)
+
+    def test_private_material_has_no_direct_storage_url(self):
+        self.client.force_authenticate(self.manager)
+        upload_response = self.client.post(
+            self.lesson_material_url(),
+            {
+                "title": "Private guide",
+                "type": LearningMaterialType.PDF,
+                "file": SimpleUploadedFile(
+                    "private.pdf",
+                    PDF_CONTENT,
+                    content_type="application/pdf",
+                ),
+            },
+            format="multipart",
+        )
+        material = LearningMaterial.objects.get(pk=upload_response.data["id"])
+
+        with self.assertRaisesMessage(ValueError, "protected API"):
+            material.file.url
+
+    def test_unassigned_teacher_cannot_download_material(self):
+        material = self.create_file_material()
+        teacher = get_user_model().objects.create_user(
+            username="unassigned-download-teacher"
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(teacher)
+
+        response = self.client.get(self.download_url(material))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_download_requires_authentication(self):
+        material = self.create_file_material()
+
+        response = self.client.get(self.download_url(material))
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_download_obeys_download_allowed(self):
         material = self.create_file_material(download_allowed=False)

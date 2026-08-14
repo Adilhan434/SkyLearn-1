@@ -1,9 +1,7 @@
 from pathlib import Path
 
 
-STATICFILES_BACKEND = (
-    "whitenoise.storage.CompressedManifestStaticFilesStorage"
-)
+STATICFILES_BACKEND = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 
 def build_storage_config(
@@ -15,6 +13,7 @@ def build_storage_config(
     bucket="",
     region="",
     location="media",
+    private_media_root="private_media",
     addressing_style="path",
     querystring_expire=300,
 ):
@@ -25,6 +24,10 @@ def build_storage_config(
         return {
             "default": {
                 "BACKEND": "django.core.files.storage.FileSystemStorage",
+            },
+            "private": {
+                "BACKEND": "config.storage_backends.PrivateFileSystemStorage",
+                "OPTIONS": {"location": str(private_media_root)},
             },
             "staticfiles": staticfiles,
         }
@@ -52,17 +55,20 @@ def build_storage_config(
         "secret_key": secret_key,
         "region_name": region,
     }
-    options.update(
-        {
-            key: value
-            for key, value in optional_options.items()
-            if value
-        }
-    )
+    options.update({key: value for key, value in optional_options.items() if value})
     return {
         "default": {
             "BACKEND": "storages.backends.s3.S3Storage",
             "OPTIONS": options,
+        },
+        "private": {
+            "BACKEND": "config.storage_backends.PrivateS3Storage",
+            "OPTIONS": {
+                **options,
+                "location": "/".join(
+                    part for part in (location.strip("/"), "private") if part
+                ),
+            },
         },
         "staticfiles": staticfiles,
     }
@@ -70,3 +76,7 @@ def build_storage_config(
 
 def local_media_root(base_dir):
     return str(Path(base_dir) / "media")
+
+
+def local_private_media_root(base_dir):
+    return str(Path(base_dir) / "private_media")

@@ -254,20 +254,27 @@ PostgreSQL is the primary development and staging database. `DATABASE_URL`
 takes precedence over individual `DB_*` variables. SQLite remains available
 only when explicitly selected for isolated tests.
 
-Media files use Django's storage interface. `USE_S3=False` selects local
-`FileSystemStorage` under `MEDIA_ROOT`. `USE_S3=True` selects the
-`django-storages` S3 backend, supporting AWS S3, MinIO and compatible services
-through `S3_ENDPOINT_URL`, bucket, region and addressing-style settings.
-Objects are private (`default_acl=None`), names are not overwritten and signed
-URLs are enabled with a configurable expiry. Credentials are read only from
-environment variables or boto3's runtime IAM credential chain.
+Media files use Django's storage interface. `USE_S3=False` selects local file
+storage; `USE_S3=True` selects the `django-storages` S3 backend, supporting AWS
+S3, MinIO and compatible services through `S3_ENDPOINT_URL`, bucket, region and
+addressing-style settings. Credentials are read only from environment variables
+or boto3's runtime IAM credential chain.
+
+Learning material uploads use the dedicated `private` storage alias. Locally it
+stores files under `PRIVATE_MEDIA_ROOT`, outside the publicly served
+`MEDIA_ROOT`; in S3 it uses the `private` key prefix. Both private backends
+deliberately reject direct URL generation. A client can obtain file bytes only
+from `GET /api/v1/materials/{id}/download/`, which checks authentication, the
+`materials.view` permission, access to the owning course and
+`download_allowed` before opening the storage object. The default public
+storage remains available for non-sensitive media.
 
 The optional Docker Compose environment contains:
 
 - `backend` on port `8000`;
 - PostgreSQL 16 on container port `5432` and default host port `5433`;
 - health checks for both services;
-- persistent PostgreSQL and media volumes.
+- persistent PostgreSQL, public media and private material volumes.
 
 Local environment setup is documented in [`LOCAL_SETUP.md`](LOCAL_SETUP.md).
 

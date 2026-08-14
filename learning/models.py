@@ -5,6 +5,7 @@ from django.db.models import Q
 
 from audit.models import AuditModel
 from courses.models import Course
+from learning.storage import material_storage
 
 
 class ReleaseType(models.TextChoices):
@@ -70,10 +71,7 @@ class CourseModule(AuditModel):
             models.CheckConstraint(
                 check=(
                     Q(release_type=ReleaseType.DATE, release_at__isnull=False)
-                    | (
-                        ~Q(release_type=ReleaseType.DATE)
-                        & Q(release_at__isnull=True)
-                    )
+                    | (~Q(release_type=ReleaseType.DATE) & Q(release_at__isnull=True))
                 ),
                 name="learning_module_release_fields",
             ),
@@ -211,22 +209,22 @@ class Lesson(AuditModel):
             if self.release_at is None:
                 errors["release_at"] = "A date-based lesson requires release_at."
             if self.required_lesson_id:
-                errors["required_lesson"] = (
-                    "A date-based lesson cannot require another lesson."
-                )
+                errors[
+                    "required_lesson"
+                ] = "A date-based lesson cannot require another lesson."
         elif self.release_type == ReleaseType.AFTER_LESSON:
             if not self.required_lesson_id:
-                errors["required_lesson"] = (
-                    "An after-lesson release requires required_lesson."
-                )
+                errors[
+                    "required_lesson"
+                ] = "An after-lesson release requires required_lesson."
             if self.release_at is not None:
-                errors["release_at"] = (
-                    "An after-lesson release cannot define release_at."
-                )
+                errors[
+                    "release_at"
+                ] = "An after-lesson release cannot define release_at."
         elif self.release_at is not None or self.required_lesson_id:
-            errors["release_type"] = (
-                "Release fields do not match the selected release type."
-            )
+            errors[
+                "release_type"
+            ] = "Release fields do not match the selected release type."
 
         if self.required_lesson_id:
             self._validate_required_lesson(errors)
@@ -235,29 +233,27 @@ class Lesson(AuditModel):
 
     def _validate_required_lesson(self, errors):
         required_lesson = self.required_lesson
-        if required_lesson is self or (
-            self.pk and required_lesson.pk == self.pk
-        ):
+        if required_lesson is self or (self.pk and required_lesson.pk == self.pk):
             errors["required_lesson"] = "A lesson cannot require itself."
             return
         if required_lesson.course.pk != self.course.pk:
-            errors["required_lesson"] = (
-                "The required lesson must belong to the same course."
-            )
+            errors[
+                "required_lesson"
+            ] = "The required lesson must belong to the same course."
             return
 
         visited = set()
         current = required_lesson
         while current is not None:
             if current is self or (self.pk and current.pk == self.pk):
-                errors["required_lesson"] = (
-                    "The required lesson would create a dependency cycle."
-                )
+                errors[
+                    "required_lesson"
+                ] = "The required lesson would create a dependency cycle."
                 return
             if current.pk in visited:
-                errors["required_lesson"] = (
-                    "The required lesson chain already contains a cycle."
-                )
+                errors[
+                    "required_lesson"
+                ] = "The required lesson chain already contains a cycle."
                 return
             visited.add(current.pk)
             current = current.required_lesson
@@ -280,7 +276,11 @@ class LearningMaterial(AuditModel):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     type = models.CharField(max_length=20, choices=LearningMaterialType.choices)
-    file = models.FileField(upload_to="learning/materials/", blank=True)
+    file = models.FileField(
+        upload_to="learning/materials/",
+        storage=material_storage,
+        blank=True,
+    )
     external_url = models.URLField(blank=True)
     original_filename = models.CharField(max_length=255, blank=True)
     mime_type = models.CharField(max_length=255, blank=True)
