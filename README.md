@@ -249,6 +249,7 @@ Release 1 моделями без отдельного плана миграци
 - [Локальный запуск](docs/LOCAL_SETUP.md)
 - [Архитектура](docs/ARCHITECTURE.md)
 - [Frontend API contract](docs/FRONTEND_API_CONTRACT.md)
+- [Статус backend Release 1](docs/RELEASE1_BACKEND_STATUS.md)
 - [Audit model](docs/AUDIT_MODEL.md)
 - [Backend audit](docs/BACKEND_AUDIT.md)
 
