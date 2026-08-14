@@ -53,7 +53,7 @@
 | CI и coverage | `DONE` | `.github/workflows/django.yml`, `pylint.yml`, `.coveragerc` | CI выполняет check, migrations, schema, full tests, coverage и Pylint для всех Release 1 apps, включая `calendar_events` | GitHub-hosted прогон окончательно подтверждается после push |
 | Fresh database flow | `DONE` | `migrate -> seed_release1 -> check -> health` | Проверено на изолированной чистой PostgreSQL 18.3 database; повторный seed сохранил стабильные counts | Временная verification database удалена после успешного прогона |
 | Security/secrets audit | `DONE` | `docs/SECURITY_AUDIT.md`; settings, environment, Git history and dependencies | Маскированный secrets scan, `pip-audit`, `pip check`, deploy check и критические тесты | `X_FRAME_OPTIONS=SAMEORIGIN` намеренно сохранён для same-origin SCORM и документирован |
-| Full regression and Definition of Done | `PENDING` | Полный Release 1 backend | `python manage.py test`, coverage, OpenAPI, lint | Выполняется после оставшихся Swagger/error/CI задач |
+| Full regression and Definition of Done | `DONE` | Полный Release 1 backend на Django 5.2/PostgreSQL | 500 tests; 97% coverage; migrations, OpenAPI, dependency audit и Pylint 10/10 | Локальный regression завершён; GitHub-hosted CI подтверждается после push |
 
 ## Известные ограничения Release 1
 
@@ -87,5 +87,4 @@ Legacy apps `finance`, `attendance`, `result`, parent flows и их данные
 
 ## Что осталось перед Pull Request
 
-1. Запустить полный набор tests, coverage, migrations, OpenAPI и lint.
-2. Создать Pull Request в `develop`.
+1. Создать Pull Request в `develop`.
