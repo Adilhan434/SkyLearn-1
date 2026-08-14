@@ -8,6 +8,11 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import LMSPermission, LMSPermissionCode, Role, RoleCode
+from audit.models import (
+    CourseHistoryAction,
+    CourseHistoryEvent,
+    CourseHistoryObjectType,
+)
 from courses.copying import copy_course
 from courses.models import (
     Course,
@@ -555,6 +560,14 @@ class CourseAPITests(APITestCase):
         created = Course.objects.get(code="CS201")
         self.assertEqual(created.created_by, self.staff)
         self.assertEqual(created.updated_by, self.staff)
+        event = CourseHistoryEvent.objects.get(
+            course=created,
+            action=CourseHistoryAction.COURSE_CREATED,
+        )
+        self.assertEqual(event.actor, self.staff)
+        self.assertEqual(event.object_type, CourseHistoryObjectType.COURSE)
+        self.assertEqual(event.object_id, created.pk)
+        self.assertEqual(event.object_title, created.title)
 
     def test_create_normalizes_course_code(self):
         self.client.force_authenticate(self.staff)
@@ -748,6 +761,29 @@ class CourseAPITests(APITestCase):
         self.course.refresh_from_db()
         self.assertEqual(self.course.title, "Updated Course")
         self.assertEqual(self.course.updated_by, self.user)
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.COURSE_UPDATED,
+        )
+        self.assertEqual(event.actor, self.user)
+        self.assertEqual(event.object_title, "Updated Course")
+        self.assertEqual(event.details, {"changed_fields": ["title"]})
+
+    def test_empty_patch_does_not_create_course_updated_event(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.patch(
+            f"{self.list_url}{self.course.pk}/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            self.course.history_events.filter(
+                action=CourseHistoryAction.COURSE_UPDATED,
+            ).exists()
+        )
 
     def test_patch_validates_dates_against_existing_values(self):
         self.client.force_authenticate(self.user)

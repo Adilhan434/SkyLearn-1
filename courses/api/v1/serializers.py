@@ -3,6 +3,8 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from accounts.models import RoleCode, User
+from audit.models import CourseHistoryAction, CourseHistoryObjectType
+from audit.services import record_course_history_event
 from courses.copying import CourseCodeExists
 from courses.models import (
     Course,
@@ -305,18 +307,38 @@ class CourseWriteSerializer(serializers.ModelSerializer):
             teacher = user
         if teacher is not None:
             self._set_primary_teacher(course, teacher, user)
+        record_course_history_event(
+            course=course,
+            action=CourseHistoryAction.COURSE_CREATED,
+            actor=user,
+            object_type=CourseHistoryObjectType.COURSE,
+            object_id=course.pk,
+            object_title=course.title,
+        )
         return course
 
     @transaction.atomic
     def update(self, instance, validated_data):
         user = self.context["request"].user
+        changed_fields = set(validated_data)
         teacher = validated_data.pop("teacher", None)
+        if not changed_fields:
+            return instance
         instance.updated_by = user
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.save()
         if teacher is not None:
             self._set_primary_teacher(instance, teacher, user)
+        record_course_history_event(
+            course=instance,
+            action=CourseHistoryAction.COURSE_UPDATED,
+            actor=user,
+            object_type=CourseHistoryObjectType.COURSE,
+            object_id=instance.pk,
+            object_title=instance.title,
+            details={"changed_fields": sorted(changed_fields)},
+        )
         return instance
 
     @staticmethod

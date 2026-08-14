@@ -28,6 +28,11 @@ secrets or complete field-level snapshots.
 The older `courses.CourseStatusHistory` model remains available while
 lifecycle writers are migrated to the common event store.
 
+Course creation and regular Course API updates already append
+`course_created` and `course_updated` events. Update events store only the
+names of changed request fields; request values and uploaded file contents are
+not copied into history details.
+
 ## Using the model
 
 ```python
