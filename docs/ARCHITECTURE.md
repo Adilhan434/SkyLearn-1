@@ -26,6 +26,7 @@ integration task requires it.
 | `enrollments` | Student-to-course membership and enrollment lifecycle | Active model; API deferred |
 | `learning` | Ordered course modules, topics, lessons and release conditions | Active models, Admin and structure management API |
 | `progress` | Minimal operational lesson progress and completion state | Active model and Admin; API follows separately |
+| `calendar_events` | Course events and staff/student Calendar APIs | Active model, Admin and API |
 
 The project follows its existing top-level Django app layout. The new apps are
 therefore located beside `accounts`, `core`, `attendance`, `finance` and
@@ -179,8 +180,8 @@ exclude review, publication-owner and audit fields. Nested structure, lesson
 availability and safe material metadata are included in Student Course Detail.
 Only published lessons are exposed. Each lesson contains `status`,
 `is_available` and `lock_reason`; release checks use the prefetched hierarchy
-without per-lesson queries. `LessonProgress` now stores operational lesson
-state; wiring it into these responses is handled by the following API tasks.
+without per-lesson queries. `LessonProgress` stores operational lesson state
+and drives these response fields directly.
 Protected material download and video playback accept an enrolled Student but
 continue to reject users without an Active enrollment in the Published course.
 
@@ -199,7 +200,22 @@ Detail, so the frontend does not need to reconcile competing data sources.
 dashboard contract. `continue_learning` prefers the most recently updated
 available In Progress lesson and otherwise selects the first available
 unfinished lesson. It is an empty object when there is nothing to continue.
-`upcoming_events` remains an empty list until the Calendar domain is introduced.
+`upcoming_events` contains the next five public future events visible through
+the Student Calendar access policy.
+
+### Calendar
+
+`calendar_events.CalendarEvent` attaches a scheduled item to a Course and
+supports `course_start`, `course_end`, `module_release`, `lesson_release` and
+`custom` types. An optional end cannot precede the start. The `(course,
+start_at)` index supports course timeline reads, and shared audit fields record
+the staff actor.
+
+Staff Calendar CRUD uses `calendar.view`/`calendar.manage` together with
+object-level Course scope. The Student Calendar is read-only and exposes only
+public events belonging to the student's Active Published courses. Both lists
+support `date_from`, `date_to`, `course` and `event_type` filters and standard
+pagination.
 
 ### SIS enrollment integration
 
@@ -287,6 +303,9 @@ The versioned API is mounted in `api.v1.urls`:
 | `GET /api/v1/student/progress/` | Aggregate operational progress for the Student | Student role and active enrollments |
 | `GET /api/v1/student/courses/{id}/progress/` | Operational progress for one enrolled course | Student role and active enrollment |
 | `GET /api/v1/student/dashboard/` | Release 1 course, progress and continue-learning summary | Student role |
+| `GET, POST /api/v1/calendar/events/` | Scoped staff Calendar list/create | Calendar view/manage permission and Course access |
+| `GET, PATCH, DELETE /api/v1/calendar/events/{id}/` | Scoped staff Calendar detail/update/delete | Calendar view/manage permission and Course access |
+| `GET /api/v1/student/calendar/` | Public events for Active Published enrolled courses | Student role and calendar-view permission |
 | `POST /api/v1/integrations/sis/enrollments/sync/` | Idempotently apply an SIS enroll/withdraw event | Enrollment-manage permission |
 | `GET, POST /api/v1/course-templates/` | List active templates or snapshot an accessible course | Copy permission |
 | `GET /api/v1/course-templates/{id}/` | Retrieve active template metadata | Copy permission |
@@ -443,7 +462,7 @@ The following functionality is outside the current foundation:
 - Organization CRUD API;
 - learning objects and SCORM;
 - assignments, quizzes and Gradebook;
-- student progress and calendar;
+- course history/audit event API;
 - course publication workflow beyond the base status field;
 - course-template update and delete endpoints;
 - Teacher Portal and Student Progress APIs;

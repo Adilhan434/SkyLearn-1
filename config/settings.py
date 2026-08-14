@@ -103,6 +103,7 @@ PROJECT_APPS = [
     "enrollments.apps.EnrollmentsConfig",
     "learning.apps.LearningConfig",
     "progress.apps.ProgressConfig",
+    "calendar_events.apps.CalendarEventsConfig",
     "audit.apps.AuditConfig",
 ]
 

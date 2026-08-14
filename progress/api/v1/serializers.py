@@ -48,10 +48,19 @@ class ContinueLearningSerializer(serializers.Serializer):
     status = serializers.CharField(required=False)
 
 
+class DashboardCalendarEventSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    course_id = serializers.IntegerField()
+    title = serializers.CharField()
+    event_type = serializers.CharField()
+    start_at = serializers.DateTimeField()
+    end_at = serializers.DateTimeField(allow_null=True)
+
+
 class StudentDashboardSerializer(serializers.Serializer):
     active_courses = serializers.IntegerField(min_value=0)
     completed_lessons = serializers.IntegerField(min_value=0)
     overall_progress = serializers.IntegerField(min_value=0, max_value=100)
     continue_learning = ContinueLearningSerializer()
     courses = DashboardCourseSerializer(many=True)
-    upcoming_events = serializers.ListField(child=serializers.DictField())
+    upcoming_events = DashboardCalendarEventSerializer(many=True)

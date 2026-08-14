@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from api.v1.exceptions import CodedAPIException
+from calendar_events.querysets import student_calendar_events
 from courses.models import Course, CourseStatus
 from enrollments.models import EnrollmentStatus
 from learning.availability import evaluate_lesson_availability
@@ -327,6 +328,19 @@ class StudentDashboardService:
             }
             for course, summary in zip(courses, summaries)
         ]
+        upcoming_events = [
+            {
+                "id": event.pk,
+                "course_id": event.course_id,
+                "title": event.title,
+                "event_type": event.event_type,
+                "start_at": event.start_at,
+                "end_at": event.end_at,
+            }
+            for event in student_calendar_events(student)
+            .filter(start_at__gte=timezone.now())
+            .order_by("start_at", "id")[:5]
+        ]
         return {
             "active_courses": len(courses),
             "completed_lessons": completed_lessons,
@@ -337,5 +351,5 @@ class StudentDashboardService:
                 completed_by_course,
             ),
             "courses": course_data,
-            "upcoming_events": [],
+            "upcoming_events": upcoming_events,
         }

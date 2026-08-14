@@ -9,6 +9,7 @@ class LMSAppStructureTests(SimpleTestCase):
         "enrollments": "LMS Enrollments",
         "learning": "LMS Learning",
         "progress": "LMS Progress",
+        "calendar_events": "LMS Calendar",
         "audit": "LMS Audit",
     }
 
@@ -28,6 +29,14 @@ class LMSAppStructureTests(SimpleTestCase):
         }
 
         self.assertEqual(model_names, {"LessonProgress"})
+
+    def test_calendar_contains_release1_event_model(self):
+        model_names = {
+            model.__name__
+            for model in apps.get_app_config("calendar_events").get_models()
+        }
+
+        self.assertEqual(model_names, {"CalendarEvent"})
 
     def test_enrollments_contains_release1_enrollment_model(self):
         model_names = {
