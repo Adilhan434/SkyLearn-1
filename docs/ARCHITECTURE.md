@@ -6,6 +6,10 @@ This document describes the backend architecture prepared for Release 1. The
 project is a Django monolith with domain-oriented Django apps and a versioned
 REST API under `/api/v1/`.
 
+The screen-to-endpoint mapping, payload examples, permissions and stable error
+codes used by the web client are documented in
+[`FRONTEND_API_CONTRACT.md`](FRONTEND_API_CONTRACT.md).
+
 Release 1 introduces new LMS domain boundaries alongside the existing legacy
 apps. Legacy models and endpoints remain available until their consumers are
 migrated and compatibility is confirmed. New code must not add dependencies
@@ -20,12 +24,12 @@ integration task requires it.
 |---|---|---|
 | `api` | API v1 root, health check, OpenAPI integration and common error handling | Active |
 | `accounts` | Custom user, JWT authentication, current-user endpoint, roles and base User API | Active |
-| `audit` | Shared abstract audit model and Django Admin audit mixin | Active |
+| `audit` | Shared audit fields, Admin mixin and common Course History events | Active |
 | `organization` | Faculties, departments, academic programs, student groups and semesters | Active models and Admin; API deferred |
 | `courses` | Course metadata, lifecycle, copying, templates and management API | Active |
-| `enrollments` | Student-to-course membership and enrollment lifecycle | Active model; API deferred |
+| `enrollments` | Student-to-course membership, management API, student course access and SIS sync boundary | Active |
 | `learning` | Ordered course modules, topics, lessons and release conditions | Active models, Admin and structure management API |
-| `progress` | Minimal operational lesson progress and completion state | Active model and Admin; API follows separately |
+| `progress` | Lesson progress, completion, student progress and dashboard APIs | Active |
 | `calendar_events` | Course events and staff/student Calendar APIs | Active model, Admin and API |
 
 The project follows its existing top-level Django app layout. The new apps are
@@ -460,14 +464,11 @@ is `/api/v1/courses/` and uses `courses.Course`.
 
 The following functionality is outside the current foundation:
 
-- Organization CRUD API;
-- learning objects and SCORM;
 - assignments, quizzes and Gradebook;
-- course publication workflow beyond the base status field;
 - course-template update and delete endpoints;
-- Teacher Portal and Student Progress APIs;
-- S3 or another remote file-storage integration;
-- complete field-level Audit Log.
+- dedicated Teacher/Admin dashboard aggregate endpoints;
+- Organization REST CRUD;
+- complete field-level Audit Log beyond the common Course History feed.
 
 These features should be implemented in their corresponding domain apps
 instead of expanding the legacy `core` app.
