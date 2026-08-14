@@ -218,6 +218,8 @@ SPECTACULAR_SETTINGS = {
     ],
     'ENUM_NAME_OVERRIDES': {
         'CourseStatusEnum': 'courses.models.CourseStatus',
+        'CourseHistoryActionEnum': 'audit.models.CourseHistoryAction',
+        'SISSyncActionEnum': 'enrollments.models.SISSyncAction',
         'RoleCodeEnum': 'accounts.models.RoleCode',
         'ScormPackageStatusEnum': 'learning.models.ScormPackageStatus',
     },

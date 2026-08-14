@@ -3,7 +3,11 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from accounts.models import RoleCode, User
-from audit.models import CourseHistoryAction, CourseHistoryObjectType
+from audit.models import (
+    CourseHistoryAction,
+    CourseHistoryEvent,
+    CourseHistoryObjectType,
+)
 from audit.services import record_course_history_event
 from courses.copying import CourseCodeExists
 from courses.models import (
@@ -151,6 +155,42 @@ class CourseReadinessSerializer(serializers.Serializer):
     score = serializers.IntegerField(min_value=0, max_value=100)
     ready_for_review = serializers.BooleanField()
     checks = ReadinessCheckSerializer(many=True)
+
+
+class CourseHistoryActorSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ("id", "full_name")
+
+    def get_full_name(self, obj) -> str:
+        return " ".join(
+            part for part in (obj.first_name, obj.last_name) if part
+        )
+
+
+class CourseHistoryObjectSerializer(serializers.Serializer):
+    type = serializers.CharField()
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+
+
+class CourseHistoryEventSerializer(serializers.ModelSerializer):
+    actor = CourseHistoryActorSerializer(read_only=True, allow_null=True)
+    object = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CourseHistoryEvent
+        fields = ("id", "action", "actor", "object", "created_at")
+
+    @extend_schema_field(CourseHistoryObjectSerializer)
+    def get_object(self, obj):
+        return {
+            "type": obj.object_type,
+            "id": obj.object_id,
+            "title": obj.object_title,
+        }
 
 
 class CourseCopySerializer(serializers.Serializer):

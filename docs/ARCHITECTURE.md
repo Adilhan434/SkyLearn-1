@@ -265,6 +265,7 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/` | Create a course | Staff/admin |
 | `GET /api/v1/courses/{id}/` | Retrieve course metadata | Authenticated |
 | `GET /api/v1/courses/{id}/readiness/` | Course readiness score and checks | Course view permission |
+| `GET /api/v1/courses/{id}/history/` | Paginated course and content history | Course view permission and object scope |
 | `GET /api/v1/courses/{id}/structure/` | Nested Module, Topic and Lesson structure | Course view permission |
 | `POST /api/v1/courses/{id}/structure/reorder/` | Atomically reorder sibling modules, topics or lessons | Structure-manage permission |
 | `POST /api/v1/courses/{id}/modules/` | Append or explicitly order a module | Structure-manage permission |
@@ -462,7 +463,6 @@ The following functionality is outside the current foundation:
 - Organization CRUD API;
 - learning objects and SCORM;
 - assignments, quizzes and Gradebook;
-- course history/audit event API;
 - course publication workflow beyond the base status field;
 - course-template update and delete endpoints;
 - Teacher Portal and Student Progress APIs;

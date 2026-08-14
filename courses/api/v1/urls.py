@@ -12,6 +12,7 @@ from .views import (
     ArchiveCourseView,
     CourseDetailView,
     CourseCopyView,
+    CourseHistoryView,
     CourseListCreateView,
     CourseReadinessView,
     PublishCourseView,
@@ -31,6 +32,7 @@ urlpatterns = [
         name="enrollment-list-create",
     ),
     path("<int:pk>/", CourseDetailView.as_view(), name="detail"),
+    path("<int:pk>/history/", CourseHistoryView.as_view(), name="history"),
     path(
         "<int:pk>/readiness/",
         CourseReadinessView.as_view(),

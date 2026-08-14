@@ -1,4 +1,5 @@
 from django.db.models import Prefetch
+from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers
@@ -6,6 +7,7 @@ from rest_framework import filters, generics
 from rest_framework.response import Response
 
 from accounts.models import LMSPermissionCode, RoleCode
+from audit.models import CourseHistoryEvent
 from courses.copying import copy_course, course_copy_queryset
 from courses.lifecycle import transition_course
 from courses.models import (
@@ -28,6 +30,7 @@ from .pagination import CoursePagination
 from .serializers import (
     CourseDetailSerializer,
     CourseCopySerializer,
+    CourseHistoryEventSerializer,
     CourseListSerializer,
     CourseReadinessSerializer,
     ReturnForRevisionSerializer,
@@ -171,6 +174,27 @@ class CourseReadinessView(generics.GenericAPIView):
         del request, args, kwargs
         course = self.get_object()
         return Response(evaluate_course_readiness(course))
+
+
+class CourseHistoryView(generics.ListAPIView):
+    queryset = CourseHistoryEvent.objects.none()
+    serializer_class = CourseHistoryEventSerializer
+    permission_classes = (CourseAccessPermission,)
+    pagination_class = CoursePagination
+
+    def get_course(self):
+        if not hasattr(self, "_course"):
+            self._course = get_object_or_404(
+                courses_accessible_to(self.request.user),
+                pk=self.kwargs["pk"],
+            )
+            self.check_object_permissions(self.request, self._course)
+        return self._course
+
+    def get_queryset(self):
+        return CourseHistoryEvent.objects.filter(
+            course=self.get_course(),
+        ).select_related("actor")
 
 
 class CourseCopyView(generics.GenericAPIView):
