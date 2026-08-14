@@ -30,6 +30,7 @@ django.template.context.BaseContext.__copy__ = fixed_base_context_copy
 from decouple import Csv, config
 from django.utils.translation import gettext_lazy as _
 from config.database import build_database_config
+from config.storage import build_storage_config, local_media_root
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -301,7 +302,31 @@ STATICFILES_FINDERS = [
 
 # Media files config
 MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+MEDIA_ROOT = local_media_root(BASE_DIR)
+USE_S3 = config("USE_S3", default=False, cast=bool)
+S3_ENDPOINT_URL = config("S3_ENDPOINT_URL", default="")
+S3_ACCESS_KEY = config("S3_ACCESS_KEY", default="")
+S3_SECRET_KEY = config("S3_SECRET_KEY", default="")
+S3_BUCKET = config("S3_BUCKET", default="")
+S3_REGION = config("S3_REGION", default="")
+S3_LOCATION = config("S3_LOCATION", default="media")
+S3_ADDRESSING_STYLE = config("S3_ADDRESSING_STYLE", default="path")
+S3_QUERYSTRING_EXPIRE = config(
+    "S3_QUERYSTRING_EXPIRE",
+    default=300,
+    cast=int,
+)
+STORAGES = build_storage_config(
+    use_s3=USE_S3,
+    endpoint_url=S3_ENDPOINT_URL,
+    access_key=S3_ACCESS_KEY,
+    secret_key=S3_SECRET_KEY,
+    bucket=S3_BUCKET,
+    region=S3_REGION,
+    location=S3_LOCATION,
+    addressing_style=S3_ADDRESSING_STYLE,
+    querystring_expire=S3_QUERYSTRING_EXPIRE,
+)
 MATERIAL_MAX_UPLOAD_SIZE_MB = config(
     "MATERIAL_MAX_UPLOAD_SIZE_MB",
     default=100,
@@ -359,8 +384,6 @@ LOGGING = {
 }
 
 # WhiteNoise configuration
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
 STUDENT_ID_PREFIX = config("STUDENT_ID_PREFIX", "ugr")
 LECTURER_ID_PREFIX = config("LECTURER_ID_PREFIX", "lec")
 

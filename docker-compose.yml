@@ -33,6 +33,15 @@ services:
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:5173}
       CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-True}
       EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+      USE_S3: ${USE_S3:-False}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_LOCATION: ${S3_LOCATION:-media}
+      S3_ADDRESSING_STYLE: ${S3_ADDRESSING_STYLE:-path}
+      S3_QUERYSTRING_EXPIRE: ${S3_QUERYSTRING_EXPIRE:-300}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

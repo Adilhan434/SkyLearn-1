@@ -254,6 +254,14 @@ PostgreSQL is the primary development and staging database. `DATABASE_URL`
 takes precedence over individual `DB_*` variables. SQLite remains available
 only when explicitly selected for isolated tests.
 
+Media files use Django's storage interface. `USE_S3=False` selects local
+`FileSystemStorage` under `MEDIA_ROOT`. `USE_S3=True` selects the
+`django-storages` S3 backend, supporting AWS S3, MinIO and compatible services
+through `S3_ENDPOINT_URL`, bucket, region and addressing-style settings.
+Objects are private (`default_acl=None`), names are not overwritten and signed
+URLs are enabled with a configurable expiry. Credentials are read only from
+environment variables or boto3's runtime IAM credential chain.
+
 The optional Docker Compose environment contains:
 
 - `backend` on port `8000`;
