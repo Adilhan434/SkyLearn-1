@@ -33,6 +33,10 @@ Course creation and regular Course API updates already append
 names of changed request fields; request values and uploaded file contents are
 not copied into history details.
 
+Course Structure writes append create, update and delete events for Module,
+Topic and Lesson objects. A confirmed cascade delete records a snapshot event
+for every nested Topic and Lesson before the database rows are removed.
+
 ## Using the model
 
 ```python

@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import Role, RoleCode
+from audit.models import CourseHistoryAction, CourseHistoryEvent
 from courses.models import (
     Course,
     CourseTeachingAssignment,
@@ -265,6 +266,13 @@ class CourseStructureAPITests(APITestCase):
         self.assertEqual(module.course, self.course)
         self.assertEqual(module.created_by, self.manager)
         self.assertEqual(module.updated_by, self.manager)
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.MODULE_CREATED,
+            object_id=module.pk,
+        )
+        self.assertEqual(event.actor, self.manager)
+        self.assertEqual(event.object_title, module.title)
 
     def test_create_without_order_appends_module(self):
         CourseModule.objects.create(course=self.course, title="First", order=1)
@@ -340,6 +348,13 @@ class CourseStructureAPITests(APITestCase):
         module.refresh_from_db()
         self.assertEqual(module.title, "Updated Teacher Module")
         self.assertEqual(module.updated_by, self.teacher)
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.MODULE_UPDATED,
+            object_id=module.pk,
+        )
+        self.assertEqual(event.actor, self.teacher)
+        self.assertEqual(event.details, {"changed_fields": ["title"]})
 
     def test_unassigned_teacher_cannot_create_module(self):
         teacher = get_user_model().objects.create_user(
@@ -404,12 +419,20 @@ class CourseStructureAPITests(APITestCase):
             title="Empty Module",
             order=1,
         )
+        module_id = module.pk
         self.client.force_authenticate(self.manager)
 
         response = self.client.delete(self.module_detail_url(module))
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(CourseModule.objects.filter(pk=module.pk).exists())
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.MODULE_DELETED,
+            object_id=module_id,
+        )
+        self.assertEqual(event.actor, self.manager)
+        self.assertEqual(event.object_title, "Empty Module")
 
     def test_non_empty_module_requires_delete_confirmation(self):
         structure = self.create_structure()
@@ -427,6 +450,9 @@ class CourseStructureAPITests(APITestCase):
         module = structure["first_module"]
         first_topic = structure["first_topic"]
         first_lesson = structure["first_lesson"]
+        module_id = module.pk
+        topic_id = first_topic.pk
+        lesson_id = first_lesson.pk
         self.client.force_authenticate(self.manager)
 
         response = self.client.delete(
@@ -439,6 +465,24 @@ class CourseStructureAPITests(APITestCase):
         self.assertFalse(CourseModule.objects.filter(pk=module.pk).exists())
         self.assertFalse(CourseTopic.objects.filter(pk=first_topic.pk).exists())
         self.assertFalse(Lesson.objects.filter(pk=first_lesson.pk).exists())
+        self.assertTrue(
+            self.course.history_events.filter(
+                action=CourseHistoryAction.MODULE_DELETED,
+                object_id=module_id,
+            ).exists()
+        )
+        self.assertTrue(
+            self.course.history_events.filter(
+                action=CourseHistoryAction.TOPIC_DELETED,
+                object_id=topic_id,
+            ).exists()
+        )
+        self.assertTrue(
+            self.course.history_events.filter(
+                action=CourseHistoryAction.LESSON_DELETED,
+                object_id=lesson_id,
+            ).exists()
+        )
 
     def test_external_lesson_dependency_blocks_confirmed_module_delete(self):
         structure = self.create_structure()
@@ -505,6 +549,13 @@ class CourseStructureAPITests(APITestCase):
         self.assertEqual(topic.module, module)
         self.assertEqual(topic.created_by, self.manager)
         self.assertEqual(topic.updated_by, self.manager)
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.TOPIC_CREATED,
+            object_id=topic.pk,
+        )
+        self.assertEqual(event.actor, self.manager)
+        self.assertEqual(event.object_title, topic.title)
 
     def test_create_topic_without_order_appends_to_module(self):
         module = CourseModule.objects.create(
@@ -567,6 +618,13 @@ class CourseStructureAPITests(APITestCase):
         topic.refresh_from_db()
         self.assertEqual(topic.title, "Updated Teacher Topic")
         self.assertEqual(topic.updated_by, self.teacher)
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.TOPIC_UPDATED,
+            object_id=topic.pk,
+        )
+        self.assertEqual(event.actor, self.teacher)
+        self.assertEqual(event.details, {"changed_fields": ["title"]})
 
     def test_unassigned_teacher_cannot_create_topic(self):
         module = CourseModule.objects.create(
@@ -628,12 +686,20 @@ class CourseStructureAPITests(APITestCase):
             title="Empty Topic",
             order=1,
         )
+        topic_id = topic.pk
         self.client.force_authenticate(self.manager)
 
         response = self.client.delete(self.topic_detail_url(topic))
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(CourseTopic.objects.filter(pk=topic.pk).exists())
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.TOPIC_DELETED,
+            object_id=topic_id,
+        )
+        self.assertEqual(event.actor, self.manager)
+        self.assertEqual(event.object_title, "Empty Topic")
 
     def test_non_empty_topic_requires_delete_confirmation(self):
         structure = self.create_structure()
@@ -734,6 +800,13 @@ class CourseStructureAPITests(APITestCase):
         self.assertEqual(detail_response.data["lesson_type"], LessonType.VIDEO)
         self.assertEqual(lesson.created_by, self.manager)
         self.assertEqual(lesson.updated_by, self.manager)
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.LESSON_CREATED,
+            object_id=lesson.pk,
+        )
+        self.assertEqual(event.actor, self.manager)
+        self.assertEqual(event.object_title, lesson.title)
 
     def test_create_lesson_without_order_appends_to_topic(self):
         structure = self.create_structure()
@@ -911,6 +984,13 @@ class CourseStructureAPITests(APITestCase):
         lesson.refresh_from_db()
         self.assertEqual(lesson.title, "Teacher Updated Lesson")
         self.assertEqual(lesson.updated_by, self.teacher)
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.LESSON_UPDATED,
+            object_id=lesson.pk,
+        )
+        self.assertEqual(event.actor, self.teacher)
+        self.assertEqual(event.details, {"changed_fields": ["title"]})
 
     def test_unassigned_teacher_cannot_get_lesson(self):
         lesson = self.create_structure()["first_lesson"]
@@ -949,12 +1029,20 @@ class CourseStructureAPITests(APITestCase):
     def test_leaf_lesson_can_be_deleted(self):
         structure = self.create_structure()
         lesson = structure["second_lesson"]
+        lesson_id = lesson.pk
         self.client.force_authenticate(self.manager)
 
         response = self.client.delete(self.lesson_detail_url(lesson))
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Lesson.objects.filter(pk=lesson.pk).exists())
+        event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.LESSON_DELETED,
+            object_id=lesson_id,
+        )
+        self.assertEqual(event.actor, self.manager)
+        self.assertEqual(event.object_title, lesson.title)
 
     def test_required_lesson_cannot_be_deleted(self):
         structure = self.create_structure()

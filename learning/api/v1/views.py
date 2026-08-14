@@ -15,6 +15,8 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 
 from api.v1.exceptions import CodedAPIException
+from audit.models import CourseHistoryAction, CourseHistoryObjectType
+from audit.services import record_course_history_event
 from courses.models import Course
 from courses.permissions import CourseAccessPermission, courses_accessible_to
 from learning.models import (
@@ -137,6 +139,32 @@ class CourseModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
             release_type=ReleaseType.ALWAYS,
             release_at=None,
         )
+        for lesson in module_lessons:
+            record_course_history_event(
+                course=instance.course,
+                action=CourseHistoryAction.LESSON_DELETED,
+                actor=request.user,
+                object_type=CourseHistoryObjectType.LESSON,
+                object_id=lesson.pk,
+                object_title=lesson.title,
+            )
+        for topic in instance.topics.all():
+            record_course_history_event(
+                course=instance.course,
+                action=CourseHistoryAction.TOPIC_DELETED,
+                actor=request.user,
+                object_type=CourseHistoryObjectType.TOPIC,
+                object_id=topic.pk,
+                object_title=topic.title,
+            )
+        record_course_history_event(
+            course=instance.course,
+            action=CourseHistoryAction.MODULE_DELETED,
+            actor=request.user,
+            object_type=CourseHistoryObjectType.MODULE,
+            object_id=instance.pk,
+            object_title=instance.title,
+        )
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -196,6 +224,23 @@ class CourseTopicDetailView(generics.RetrieveUpdateDestroyAPIView):
             release_type=ReleaseType.ALWAYS,
             release_at=None,
         )
+        for lesson in topic_lessons:
+            record_course_history_event(
+                course=instance.module.course,
+                action=CourseHistoryAction.LESSON_DELETED,
+                actor=request.user,
+                object_type=CourseHistoryObjectType.LESSON,
+                object_id=lesson.pk,
+                object_title=lesson.title,
+            )
+        record_course_history_event(
+            course=instance.module.course,
+            action=CourseHistoryAction.TOPIC_DELETED,
+            actor=request.user,
+            object_type=CourseHistoryObjectType.TOPIC,
+            object_id=instance.pk,
+            object_title=instance.title,
+        )
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -238,10 +283,19 @@ class LessonDetailView(generics.RetrieveUpdateDestroyAPIView):
             "updated_by",
         ).filter(topic__module__course__in=accessible_courses)
 
+    @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.dependent_lessons.exists():
             raise LessonIsRequired()
+        record_course_history_event(
+            course=instance.topic.module.course,
+            action=CourseHistoryAction.LESSON_DELETED,
+            actor=request.user,
+            object_type=CourseHistoryObjectType.LESSON,
+            object_id=instance.pk,
+            object_title=instance.title,
+        )
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

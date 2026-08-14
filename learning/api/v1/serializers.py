@@ -6,6 +6,8 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from audit.models import CourseHistoryAction, CourseHistoryObjectType
+from audit.services import record_course_history_event
 from courses.models import Course
 from learning.file_validation import validate_material_file
 from learning.models import (
@@ -147,21 +149,43 @@ class CourseModuleWriteSerializer(serializers.ModelSerializer):
             maximum_order = course.modules.aggregate(maximum=Max("order"))["maximum"]
             validated_data["order"] = (maximum_order or 0) + 1
         self._validate_unique_order(course, validated_data["order"])
-        return CourseModule.objects.create(
+        module = CourseModule.objects.create(
             course=course,
             created_by=actor,
             updated_by=actor,
             **validated_data,
         )
+        record_course_history_event(
+            course=course,
+            action=CourseHistoryAction.MODULE_CREATED,
+            actor=actor,
+            object_type=CourseHistoryObjectType.MODULE,
+            object_id=module.pk,
+            object_title=module.title,
+        )
+        return module
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         actor = self.context["request"].user
+        changed_fields = set(validated_data)
+        if not changed_fields:
+            return instance
         order = validated_data.get("order", instance.order)
         self._validate_unique_order(instance.course, order, instance.pk)
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.updated_by = actor
         instance.save()
+        record_course_history_event(
+            course=instance.course,
+            action=CourseHistoryAction.MODULE_UPDATED,
+            actor=actor,
+            object_type=CourseHistoryObjectType.MODULE,
+            object_id=instance.pk,
+            object_title=instance.title,
+            details={"changed_fields": sorted(changed_fields)},
+        )
         return instance
 
     @staticmethod
@@ -212,21 +236,43 @@ class CourseTopicWriteSerializer(serializers.ModelSerializer):
             maximum_order = module.topics.aggregate(maximum=Max("order"))["maximum"]
             validated_data["order"] = (maximum_order or 0) + 1
         self._validate_unique_order(module, validated_data["order"])
-        return CourseTopic.objects.create(
+        topic = CourseTopic.objects.create(
             module=module,
             created_by=actor,
             updated_by=actor,
             **validated_data,
         )
+        record_course_history_event(
+            course=module.course,
+            action=CourseHistoryAction.TOPIC_CREATED,
+            actor=actor,
+            object_type=CourseHistoryObjectType.TOPIC,
+            object_id=topic.pk,
+            object_title=topic.title,
+        )
+        return topic
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         actor = self.context["request"].user
+        changed_fields = set(validated_data)
+        if not changed_fields:
+            return instance
         order = validated_data.get("order", instance.order)
         self._validate_unique_order(instance.module, order, instance.pk)
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.updated_by = actor
         instance.save()
+        record_course_history_event(
+            course=instance.module.course,
+            action=CourseHistoryAction.TOPIC_UPDATED,
+            actor=actor,
+            object_type=CourseHistoryObjectType.TOPIC,
+            object_id=instance.pk,
+            object_title=instance.title,
+            details={"changed_fields": sorted(changed_fields)},
+        )
         return instance
 
     @staticmethod
@@ -378,22 +424,43 @@ class LessonWriteSerializer(serializers.ModelSerializer):
             maximum_order = topic.lessons.aggregate(maximum=Max("order"))["maximum"]
             validated_data["order"] = (maximum_order or 0) + 1
         self._validate_unique_order(topic, validated_data["order"])
-        return Lesson.objects.create(
+        lesson = Lesson.objects.create(
             topic=topic,
             created_by=actor,
             updated_by=actor,
             **validated_data,
         )
+        record_course_history_event(
+            course=topic.module.course,
+            action=CourseHistoryAction.LESSON_CREATED,
+            actor=actor,
+            object_type=CourseHistoryObjectType.LESSON,
+            object_id=lesson.pk,
+            object_title=lesson.title,
+        )
+        return lesson
 
     @transaction.atomic
     def update(self, instance, validated_data):
         actor = self.context["request"].user
+        changed_fields = set(validated_data)
+        if not changed_fields:
+            return instance
         order = validated_data.get("order", instance.order)
         self._validate_unique_order(instance.topic, order, instance.pk)
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.updated_by = actor
         instance.save()
+        record_course_history_event(
+            course=instance.topic.module.course,
+            action=CourseHistoryAction.LESSON_UPDATED,
+            actor=actor,
+            object_type=CourseHistoryObjectType.LESSON,
+            object_id=instance.pk,
+            object_title=instance.title,
+            details={"changed_fields": sorted(changed_fields)},
+        )
         return instance
 
     @staticmethod
