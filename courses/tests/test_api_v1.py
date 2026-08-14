@@ -5,7 +5,13 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from courses.models import Course, CourseStatus
+from accounts.models import Role, RoleCode
+from courses.models import (
+    Course,
+    CourseStatus,
+    CourseTeachingAssignment,
+    CourseTeachingRole,
+)
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
@@ -18,11 +24,13 @@ class CourseAPITests(APITestCase):
             username="course-reader",
             password="test-password",
         )
+        self.user.roles.add(Role.objects.get(code=RoleCode.CONTENT_MANAGER))
         self.staff = user_model.objects.create_user(
             username="course-admin",
             password="test-password",
             is_staff=True,
         )
+        self.staff.roles.add(Role.objects.get(code=RoleCode.LMS_ADMIN))
         self.faculty = Faculty.objects.create(name="Engineering", code="ENG")
         self.other_faculty = Faculty.objects.create(name="Business", code="BUS")
         self.department = Department.objects.create(
@@ -155,9 +163,81 @@ class CourseAPITests(APITestCase):
         self.assertEqual(faculty_response.data["count"], 0)
 
     def test_regular_user_cannot_create_course(self):
-        self.client.force_authenticate(self.user)
+        regular_user = get_user_model().objects.create_user(
+            username="course-user-without-role"
+        )
+        self.client.force_authenticate(regular_user)
+
         response = self.client.post(self.list_url, self.valid_payload())
+
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_user_without_management_role_cannot_list_courses(self):
+        user = get_user_model().objects.create_user(username="plain-course-user")
+        self.client.force_authenticate(user)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_student_cannot_use_staff_course_api(self):
+        student = get_user_model().objects.create_user(username="course-student")
+        student.roles.add(Role.objects.get(code=RoleCode.STUDENT))
+        self.client.force_authenticate(student)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_teacher_list_contains_only_assigned_courses(self):
+        teacher = get_user_model().objects.create_user(username="course-teacher")
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.create_course(code="UNASSIGNED-COURSE")
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=teacher,
+            role=CourseTeachingRole.TEACHER,
+            is_primary=True,
+        )
+        self.client.force_authenticate(teacher)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.course.pk)
+
+    def test_assistant_list_contains_only_assigned_courses(self):
+        assistant = get_user_model().objects.create_user(
+            username="course-assistant"
+        )
+        assistant.roles.add(
+            Role.objects.get(code=RoleCode.TEACHING_ASSISTANT)
+        )
+        self.create_course(code="ASSISTANT-UNASSIGNED")
+        CourseTeachingAssignment.objects.create(
+            course=self.course,
+            user=assistant,
+            role=CourseTeachingRole.TEACHING_ASSISTANT,
+        )
+        self.client.force_authenticate(assistant)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.course.pk)
+
+    def test_teacher_cannot_retrieve_unassigned_course_by_id(self):
+        teacher = get_user_model().objects.create_user(
+            username="unassigned-course-teacher"
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(teacher)
+
+        response = self.client.get(f"{self.list_url}{self.course.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_staff_can_create_course_and_is_recorded_as_creator(self):
         self.client.force_authenticate(self.staff)
@@ -167,6 +247,32 @@ class CourseAPITests(APITestCase):
         created = Course.objects.get(code="CS201")
         self.assertEqual(created.created_by, self.staff)
         self.assertEqual(created.updated_by, self.staff)
+
+    def test_teacher_can_create_course_and_becomes_primary_teacher(self):
+        teacher = get_user_model().objects.create_user(username="creating-teacher")
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(teacher)
+
+        response = self.client.post(self.list_url, self.valid_payload())
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created = Course.objects.get(code="CS201")
+        assignment = created.teaching_assignments.get(user=teacher)
+        self.assertEqual(assignment.role, CourseTeachingRole.TEACHER)
+        self.assertTrue(assignment.is_primary)
+
+    def test_assistant_cannot_create_course(self):
+        assistant = get_user_model().objects.create_user(
+            username="creating-assistant"
+        )
+        assistant.roles.add(
+            Role.objects.get(code=RoleCode.TEACHING_ASSISTANT)
+        )
+        self.client.force_authenticate(assistant)
+
+        response = self.client.post(self.list_url, self.valid_payload())
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_create_validates_organization_relationships(self):
         self.client.force_authenticate(self.staff)

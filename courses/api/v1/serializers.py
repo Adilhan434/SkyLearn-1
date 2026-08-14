@@ -1,6 +1,8 @@
+from django.db import transaction
 from rest_framework import serializers
 
-from courses.models import Course
+from accounts.models import RoleCode
+from courses.models import Course, CourseTeachingAssignment, CourseTeachingRole
 
 
 class CourseListSerializer(serializers.ModelSerializer):
@@ -66,10 +68,21 @@ class CourseDetailSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         user = self.context["request"].user
-        return Course.objects.create(
+        course = Course.objects.create(
             created_by=user,
             updated_by=user,
             **validated_data,
         )
+        if user.roles.filter(code=RoleCode.TEACHER).exists():
+            CourseTeachingAssignment.objects.create(
+                course=course,
+                user=user,
+                role=CourseTeachingRole.TEACHER,
+                is_primary=True,
+                created_by=user,
+                updated_by=user,
+            )
+        return course
