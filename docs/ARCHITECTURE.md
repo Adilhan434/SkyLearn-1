@@ -184,6 +184,12 @@ state; wiring it into these responses is handled by the following API tasks.
 Protected material download and video playback accept an enrolled Student but
 continue to reject users without an Active enrollment in the Published course.
 
+The Student Progress API exposes idempotent lesson start/completion actions,
+per-course progress and an aggregate student summary. It only reads Published
+courses with an Active enrollment. Lesson actions enforce server-side release
+conditions; locked lessons return a stable `lesson_locked` conflict response.
+The summaries are operational UI state, not learning analytics.
+
 ### SIS enrollment integration
 
 `SISIntegrationService` is the transport-independent integration boundary for
@@ -265,6 +271,10 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/{id}/enrollments/` | Manually enroll or reactivate a Student | Enrollment-manage permission and course access |
 | `GET /api/v1/student/courses/` | Paginated courses available to the current Student | Student role and course-view permission |
 | `GET /api/v1/student/courses/{id}/` | Safe enrolled Course metadata | Student role and active enrollment |
+| `POST /api/v1/student/lessons/{id}/start/` | Idempotently mark an available lesson in progress | Student role and active enrollment |
+| `POST /api/v1/student/lessons/{id}/complete/` | Idempotently complete an available lesson | Student role and active enrollment |
+| `GET /api/v1/student/progress/` | Aggregate operational progress for the Student | Student role and active enrollments |
+| `GET /api/v1/student/courses/{id}/progress/` | Operational progress for one enrolled course | Student role and active enrollment |
 | `POST /api/v1/integrations/sis/enrollments/sync/` | Idempotently apply an SIS enroll/withdraw event | Enrollment-manage permission |
 | `GET, POST /api/v1/course-templates/` | List active templates or snapshot an accessible course | Copy permission |
 | `GET /api/v1/course-templates/{id}/` | Retrieve active template metadata | Copy permission |

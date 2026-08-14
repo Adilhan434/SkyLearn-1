@@ -13,6 +13,7 @@ urlpatterns = [
     path("roles/", include("accounts.api.v1.role_urls")),
     path("organization/", include("core.api.v1.organization_urls")),
     path("student/", include("enrollments.api.v1.student_urls")),
+    path("student/", include("progress.api.v1.urls")),
     path(
         "integrations/sis/",
         include("enrollments.api.v1.integration_urls"),
