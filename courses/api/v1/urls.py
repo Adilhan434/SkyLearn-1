@@ -6,6 +6,7 @@ from learning.api.v1.views import (
     CourseStructureView,
     StructureReorderView,
 )
+from enrollments.api.v1.views import CourseEnrollmentListCreateView
 
 from .views import (
     ArchiveCourseView,
@@ -24,6 +25,11 @@ app_name = "courses-v1"
 
 urlpatterns = [
     path("", CourseListCreateView.as_view(), name="list-create"),
+    path(
+        "<int:course_pk>/enrollments/",
+        CourseEnrollmentListCreateView.as_view(),
+        name="enrollment-list-create",
+    ),
     path("<int:pk>/", CourseDetailView.as_view(), name="detail"),
     path(
         "<int:pk>/readiness/",

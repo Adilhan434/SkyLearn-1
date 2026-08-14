@@ -148,8 +148,11 @@ lifecycle state, distinguishes manual enrollment from SIS synchronization and
 can retain an external SIS identifier. The model uses the shared audit fields
 and is available in Django Admin. A database constraint permits only one
 lifecycle record for each Student and Course pair; reenrollment reactivates
-that record instead of creating a duplicate. The management API is implemented
-in the following Release 1 task.
+that record instead of creating a duplicate. The course Enrollment API uses
+method-specific `enrollments.view` and `enrollments.manage` permissions plus
+object-level Course access. A duplicate active enrollment returns the stable
+`already_enrolled` error; posting a withdrawn, suspended or completed pair
+reactivates the existing record atomically.
 
 ## 4. Organization and Course relationships
 
@@ -212,6 +215,8 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/{id}/archive/` | Archive a Published course | Archive permission |
 | `POST /api/v1/courses/{id}/restore/` | Restore an Archived course | Archive permission |
 | `POST /api/v1/courses/{id}/copy/` | Copy course metadata and content into a new Draft | Copy permission and course access |
+| `GET /api/v1/courses/{id}/enrollments/` | Paginated course enrollment list | Enrollment-view permission and course access |
+| `POST /api/v1/courses/{id}/enrollments/` | Manually enroll or reactivate a Student | Enrollment-manage permission and course access |
 | `GET, POST /api/v1/course-templates/` | List active templates or snapshot an accessible course | Copy permission |
 | `GET /api/v1/course-templates/{id}/` | Retrieve active template metadata | Copy permission |
 | `POST /api/v1/course-templates/{id}/create-course/` | Create a new Draft from an active template | Copy and create permissions |
@@ -365,7 +370,6 @@ is `/api/v1/courses/` and uses `courses.Course`.
 The following functionality is outside the current foundation:
 
 - Organization CRUD API;
-- Enrollment API;
 - learning objects and SCORM;
 - assignments, quizzes and Gradebook;
 - student progress and calendar;
