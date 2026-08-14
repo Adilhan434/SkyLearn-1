@@ -5,6 +5,7 @@ from courses.models import Course, CourseStatus
 from courses.permissions import courses_accessible_to, has_course_management_role
 from enrollments.models import EnrollmentStatus
 from learning.availability import evaluate_lesson_availability
+from progress.models import LessonProgress, LessonProgressStatus
 
 
 EDITABLE_STRUCTURE_STATUSES = {
@@ -21,10 +22,7 @@ def course_content_accessible_to(user, queryset=None):
     if not user or not user.is_authenticated or not user.is_active:
         return management_courses
     is_student = user.roles.filter(code=RoleCode.STUDENT).exists()
-    if not (
-        is_student
-        and user.has_lms_permission(LMSPermissionCode.COURSES_VIEW)
-    ):
+    if not (is_student and user.has_lms_permission(LMSPermissionCode.COURSES_VIEW)):
         return management_courses
     student_courses = queryset.filter(
         status=CourseStatus.PUBLISHED,
@@ -47,13 +45,16 @@ def structure_course_for(obj):
 def can_edit_structure(user, course):
     if course.status == CourseStatus.ARCHIVED:
         return False
-    has_global_access = user.is_superuser or user.roles.filter(
-        code__in={
-            RoleCode.CONTENT_MANAGER,
-            RoleCode.LMS_ADMIN,
-            RoleCode.SUPER_ADMIN,
-        }
-    ).exists()
+    has_global_access = (
+        user.is_superuser
+        or user.roles.filter(
+            code__in={
+                RoleCode.CONTENT_MANAGER,
+                RoleCode.LMS_ADMIN,
+                RoleCode.SUPER_ADMIN,
+            }
+        ).exists()
+    )
     return has_global_access or course.status in EDITABLE_STRUCTURE_STATUSES
 
 
@@ -64,9 +65,7 @@ class StructureManagePermission(BasePermission):
         user = request.user
         return bool(
             has_course_management_role(user)
-            and user.has_lms_permission(
-                LMSPermissionCode.COURSE_STRUCTURE_MANAGE
-            )
+            and user.has_lms_permission(LMSPermissionCode.COURSE_STRUCTURE_MANAGE)
         )
 
     def has_object_permission(self, request, view, obj):
@@ -142,13 +141,19 @@ class MaterialPermission(BasePermission):
             Course.objects.filter(pk=course.pk),
         ).exists()
         if request.method == "GET":
-            is_student = request.user.roles.filter(
-                code=RoleCode.STUDENT
-            ).exists()
+            is_student = request.user.roles.filter(code=RoleCode.STUDENT).exists()
             if is_student and hasattr(obj, "lesson"):
+                completed_lesson_ids = LessonProgress.objects.filter(
+                    student=request.user,
+                    lesson__topic__module__course=course,
+                    status=LessonProgressStatus.COMPLETED,
+                ).values_list("lesson_id", flat=True)
                 return bool(
                     has_access
-                    and evaluate_lesson_availability(obj.lesson).is_available
+                    and evaluate_lesson_availability(
+                        obj.lesson,
+                        completed_lesson_ids=completed_lesson_ids,
+                    ).is_available
                 )
             return has_access
         return has_access and can_edit_structure(request.user, course)

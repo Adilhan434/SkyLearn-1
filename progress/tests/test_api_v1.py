@@ -86,6 +86,12 @@ class ProgressAPITests(APITestCase):
             kwargs={"pk": self.course.pk},
         )
 
+    def course_detail_url(self):
+        return reverse(
+            "api-v1:student-v1:course-detail",
+            kwargs={"pk": self.course.pk},
+        )
+
     @staticmethod
     def student_progress_url():
         return reverse("api-v1:progress-v1:student-progress")
@@ -284,6 +290,99 @@ class ProgressAPITests(APITestCase):
         self.assertEqual(partial.data["completed_lessons"], 1)
         self.assertEqual(partial.data["progress_percent"], 50)
         self.assertEqual(completed.data["progress_percent"], 100)
+
+    def test_course_detail_uses_same_progress_and_availability_state(self):
+        self.client.force_authenticate(self.student)
+        self.client.post(self.lesson_url("complete", self.first_lesson))
+
+        response = self.client.get(self.course_detail_url())
+
+        lessons = response.data["structure"][0]["topics"][0]["lessons"]
+        self.assertEqual(response.data["overall_progress"], 50)
+        self.assertEqual(lessons[0]["status"], LessonProgressStatus.COMPLETED)
+        self.assertEqual(lessons[1]["status"], LessonProgressStatus.NOT_STARTED)
+        self.assertTrue(lessons[1]["is_available"])
+        self.assertIsNone(lessons[1]["lock_reason"])
+
+    def test_course_progress_excludes_unpublished_and_locked_lessons(self):
+        Lesson.objects.create(
+            topic=self.first_lesson.topic,
+            title="Unpublished lesson",
+            order=3,
+            is_published=False,
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get(self.course_progress_url())
+
+        self.assertEqual(response.data["total_lessons"], 1)
+        self.assertEqual(response.data["completed_lessons"], 0)
+        self.assertEqual(response.data["progress_percent"], 0)
+
+    def test_course_progress_rounds_to_nearest_whole_percent(self):
+        Lesson.objects.create(
+            topic=self.first_lesson.topic,
+            title="Third lesson",
+            order=3,
+            is_published=True,
+        )
+        self.client.force_authenticate(self.student)
+        self.client.post(self.lesson_url("complete", self.first_lesson))
+
+        response = self.client.get(self.course_progress_url())
+
+        self.assertEqual(response.data["total_lessons"], 3)
+        self.assertEqual(response.data["completed_lessons"], 1)
+        self.assertEqual(response.data["progress_percent"], 33)
+
+    def test_course_without_available_lessons_has_zero_progress(self):
+        empty_course = Course.objects.create(
+            title="Empty Course",
+            code="EMPTY-101",
+            credits=1,
+            semester=self.course.semester,
+            faculty=self.course.faculty,
+            department=self.course.department,
+            program=self.course.program,
+            status=CourseStatus.PUBLISHED,
+            start_date=self.course.start_date,
+            end_date=self.course.end_date,
+        )
+        Enrollment.objects.create(student=self.student, course=empty_course)
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get(
+            reverse(
+                "api-v1:progress-v1:course-progress",
+                kwargs={"pk": empty_course.pk},
+            )
+        )
+
+        self.assertEqual(
+            response.data,
+            {
+                "course_id": empty_course.pk,
+                "total_lessons": 0,
+                "completed_lessons": 0,
+                "progress_percent": 0,
+            },
+        )
+
+    def test_course_progress_does_not_count_another_students_completion(self):
+        completed_at = timezone.now()
+        LessonProgress.objects.create(
+            student=self.other_student,
+            lesson=self.first_lesson,
+            status=LessonProgressStatus.COMPLETED,
+            started_at=completed_at,
+            completed_at=completed_at,
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get(self.course_progress_url())
+
+        self.assertEqual(response.data["completed_lessons"], 0)
+        self.assertEqual(response.data["progress_percent"], 0)
 
     def test_student_progress_aggregates_accessible_courses(self):
         self.client.force_authenticate(self.student)

@@ -189,6 +189,11 @@ per-course progress and an aggregate student summary. It only reads Published
 courses with an Active enrollment. Lesson actions enforce server-side release
 conditions; locked lessons return a stable `lesson_locked` conflict response.
 The summaries are operational UI state, not learning analytics.
+Course progress is the number of completed lessons divided by the currently
+available Published lessons, rounded to the nearest whole percent. Locked and
+unpublished lessons are excluded. The same calculation and progress records
+drive `overall_progress`, lesson `status` and availability in Student Course
+Detail, so the frontend does not need to reconcile competing data sources.
 
 ### SIS enrollment integration
 

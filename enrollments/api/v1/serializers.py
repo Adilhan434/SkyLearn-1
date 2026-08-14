@@ -23,6 +23,8 @@ from learning.models import (
     Lesson,
     VideoProcessingStatus,
 )
+from progress.models import LessonProgressStatus
+from progress.services import calculate_course_progress
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
@@ -173,8 +175,8 @@ class StudentLessonSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField())
     def get_status(self, obj):
-        del obj
-        return "not_started"
+        progress = self.context.get("lesson_progress_by_id", {}).get(obj.pk)
+        return progress.status if progress else LessonProgressStatus.NOT_STARTED
 
     def _availability(self, obj):
         if not hasattr(obj, "_student_availability"):
@@ -246,8 +248,10 @@ class StudentCourseDetailSerializer(StudentCourseSerializer):
 
     @extend_schema_field(serializers.IntegerField(min_value=0, max_value=100))
     def get_overall_progress(self, obj):
-        del obj
-        return 0
+        return calculate_course_progress(
+            obj,
+            self.context.get("completed_lesson_ids", ()),
+        )["progress_percent"]
 
     @extend_schema_field(StudentModuleSerializer(many=True))
     def get_structure(self, obj):

@@ -57,6 +57,32 @@ def _course_lessons(course):
     ]
 
 
+def calculate_course_progress(course, completed_lesson_ids=()):
+    """Calculate operational progress from a prefetched course hierarchy."""
+
+    lessons = _course_lessons(course)
+    completed_ids = set(completed_lesson_ids)
+    available_ids = {
+        lesson.pk
+        for lesson in lessons
+        if evaluate_lesson_availability(
+            lesson,
+            completed_lesson_ids=completed_ids,
+        ).is_available
+    }
+    completed_lessons = len(available_ids & completed_ids)
+    total_lessons = len(available_ids)
+    progress_percent = (
+        round(completed_lessons / total_lessons * 100) if total_lessons else 0
+    )
+    return {
+        "course_id": course.pk,
+        "total_lessons": total_lessons,
+        "completed_lessons": completed_lessons,
+        "progress_percent": progress_percent,
+    }
+
+
 class LessonProgressService:
     @staticmethod
     def _lesson_for_student(student, lesson_id):
@@ -187,25 +213,7 @@ class CourseProgressService:
                 status=LessonProgressStatus.COMPLETED,
             ).values_list("lesson_id", flat=True)
         )
-        available_ids = {
-            lesson.pk
-            for lesson in lessons
-            if evaluate_lesson_availability(
-                lesson,
-                completed_lesson_ids=completed_ids,
-            ).is_available
-        }
-        completed_lessons = len(available_ids & completed_ids)
-        total_lessons = len(available_ids)
-        progress_percent = (
-            round(completed_lessons / total_lessons * 100) if total_lessons else 0
-        )
-        return {
-            "course_id": course.pk,
-            "total_lessons": total_lessons,
-            "completed_lessons": completed_lessons,
-            "progress_percent": progress_percent,
-        }
+        return calculate_course_progress(course, completed_ids)
 
     @classmethod
     def course_summary(cls, *, student, course_id):

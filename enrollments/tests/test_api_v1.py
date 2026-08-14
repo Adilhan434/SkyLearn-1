@@ -25,6 +25,7 @@ from learning.models import (
     ReleaseType,
 )
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
+from progress.models import LessonProgress, LessonProgressStatus
 
 
 class EnrollmentAPITests(APITestCase):
@@ -469,7 +470,7 @@ class StudentCourseAPITests(APITestCase):
 
     def test_enrolled_student_can_download_nested_course_material(self):
         (
-            _first_lesson,
+            first_lesson,
             _second_lesson,
             material,
             locked_material,
@@ -499,6 +500,30 @@ class StudentCourseAPITests(APITestCase):
             )
         )
         self.assertEqual(locked_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        completed_at = timezone.now()
+        LessonProgress.objects.create(
+            student=self.student,
+            lesson=first_lesson,
+            status=LessonProgressStatus.COMPLETED,
+            started_at=completed_at,
+            completed_at=completed_at,
+        )
+        with patch.object(
+            locked_material.file.storage,
+            "open",
+            return_value=BytesIO(b"unlocked student file"),
+        ):
+            unlocked_response = self.client.get(
+                reverse(
+                    "api-v1:learning-v1:material-download",
+                    kwargs={"pk": locked_material.pk},
+                )
+            )
+            unlocked_content = b"".join(unlocked_response.streaming_content)
+
+        self.assertEqual(unlocked_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(unlocked_content, b"unlocked student file")
 
         self.client.force_authenticate(self.other_student)
         foreign_response = self.client.get(
