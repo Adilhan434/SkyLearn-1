@@ -23,7 +23,7 @@ integration task requires it.
 | `audit` | Shared abstract audit model and Django Admin audit mixin | Active |
 | `organization` | Faculties, departments, academic programs, student groups and semesters | Active models and Admin; API deferred |
 | `courses` | Course metadata, lifecycle, copying, templates and management API | Active |
-| `enrollments` | Future enrollment ownership and lifecycle | Reserved; no models yet |
+| `enrollments` | Student-to-course membership and enrollment lifecycle | Active model; API deferred |
 | `learning` | Ordered course modules, topics, lessons and release conditions | Active models, Admin and structure management API |
 | `progress` | Future student progress and completion state | Reserved; no models yet |
 
@@ -139,6 +139,15 @@ DOC, DOCX, PPT, PPTX, image, audio, video, external link, library link and
 other material types. Materials inherit the shared audit fields and are
 registered in Django Admin; upload and download validation is handled by the
 materials API layer.
+
+### Enrollments
+
+`enrollments.Enrollment` connects an `accounts.User` student to a Release 1
+Course. It records the `active`, `completed`, `withdrawn` or `suspended`
+lifecycle state, distinguishes manual enrollment from SIS synchronization and
+can retain an external SIS identifier. The model uses the shared audit fields
+and is available in Django Admin. Enrollment uniqueness and management API are
+implemented in the following Release 1 tasks.
 
 ## 4. Organization and Course relationships
 
