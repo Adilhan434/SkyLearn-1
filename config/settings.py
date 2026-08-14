@@ -167,6 +167,14 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
+# Provider-neutral OpenID Connect integration. JWT login remains the active
+# authentication mechanism until a university Identity Provider is supplied.
+OIDC_ENABLED = config("OIDC_ENABLED", default=False, cast=bool)
+OIDC_ISSUER_URL = config("OIDC_ISSUER_URL", default="")
+OIDC_CLIENT_ID = config("OIDC_CLIENT_ID", default="")
+OIDC_CLIENT_SECRET = config("OIDC_CLIENT_SECRET", default="")
+OIDC_REDIRECT_URI = config("OIDC_REDIRECT_URI", default="")
+
 # JWT Settings with Cookie support
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),

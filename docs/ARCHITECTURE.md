@@ -55,6 +55,22 @@ therefore located beside `accounts`, `core`, `attendance`, `finance` and
 - `accounts.Student`, `accounts.Lecturer` and the legacy `accounts.Group`
   remain available to existing modules.
 
+#### OIDC/SSO integration boundary
+
+The existing JWT login, refresh, logout and current-user endpoints remain the
+active Release 1 authentication flow. `accounts.oidc.OIDCService` provides a
+provider-neutral boundary for a future university Identity Provider: it
+validates configuration, derives the standard discovery URL and prepares
+Authorization Code Flow parameters with optional PKCE. It does not perform
+network calls or expose `OIDC_CLIENT_SECRET`.
+
+OIDC is disabled by default. When `OIDC_ENABLED=True`, Django's security checks
+require `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and
+`OIDC_REDIRECT_URI` to be configured with valid absolute URLs where applicable.
+Provider discovery, callback endpoints, claim mapping and token exchange must
+be added once the university supplies its issuer metadata, credentials and
+claim contract. No provider-specific value is hardcoded in the application.
+
 ### Audit
 
 `audit.AuditModel` is abstract and supplies:

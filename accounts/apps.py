@@ -7,6 +7,7 @@ class AccountsConfig(AppConfig):
     def ready(self) -> None:
         # Register drf-spectacular extensions.
         from .api import schema  # noqa: F401
+        from . import checks  # noqa: F401
         from django.db.models.signals import (
             m2m_changed,
             post_delete,
