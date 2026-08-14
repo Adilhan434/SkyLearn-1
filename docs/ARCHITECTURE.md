@@ -131,6 +131,15 @@ cross-course prerequisites and dependency cycles. Prerequisite lessons use
 three models inherit the shared audit fields and are registered in Django
 Admin.
 
+`LearningMaterial` belongs to both a Lesson and its Course. Model validation
+prevents those two ownership paths from referring to different courses. It
+stores a local file or external URL together with original filename, MIME
+type, size, extension and download policy metadata. Release 1 supports PDF,
+DOC, DOCX, PPT, PPTX, image, audio, video, external link, library link and
+other material types. Materials inherit the shared audit fields and are
+registered in Django Admin; upload and download validation is handled by the
+materials API layer.
+
 ## 4. Organization and Course relationships
 
 ```text

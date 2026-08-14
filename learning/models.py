@@ -22,6 +22,20 @@ class LessonType(models.TextChoices):
     EXTERNAL_LINK = "external_link", "External link"
 
 
+class LearningMaterialType(models.TextChoices):
+    PDF = "pdf", "PDF"
+    DOC = "doc", "DOC"
+    DOCX = "docx", "DOCX"
+    PPT = "ppt", "PPT"
+    PPTX = "pptx", "PPTX"
+    IMAGE = "image", "Image"
+    AUDIO = "audio", "Audio"
+    VIDEO = "video", "Video"
+    EXTERNAL_LINK = "external_link", "External link"
+    LIBRARY_LINK = "library_link", "Library link"
+    OTHER = "other", "Other"
+
+
 class CourseModule(AuditModel):
     course = models.ForeignKey(
         Course,
@@ -250,3 +264,49 @@ class Lesson(AuditModel):
 
     def __str__(self):
         return f"{self.topic} / {self.order}. {self.title}"
+
+
+class LearningMaterial(AuditModel):
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name="materials",
+    )
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="learning_materials",
+    )
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    type = models.CharField(max_length=20, choices=LearningMaterialType.choices)
+    file = models.FileField(upload_to="learning/materials/", blank=True)
+    external_url = models.URLField(blank=True)
+    original_filename = models.CharField(max_length=255, blank=True)
+    mime_type = models.CharField(max_length=255, blank=True)
+    size = models.PositiveBigIntegerField(blank=True, null=True)
+    extension = models.CharField(max_length=20, blank=True)
+    download_allowed = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("lesson", "id")
+        indexes = [
+            models.Index(
+                fields=("course", "type"),
+                name="learn_material_course_type",
+            ),
+        ]
+        verbose_name = "Learning material"
+        verbose_name_plural = "Learning materials"
+
+    def clean(self):
+        super().clean()
+        if self.lesson_id and self.course_id:
+            lesson_course_id = self.lesson.topic.module.course_id
+            if lesson_course_id != self.course_id:
+                raise ValidationError(
+                    {"course": "Material course must match the lesson course."}
+                )
+
+    def __str__(self):
+        return f"{self.course.code} / {self.lesson.title} / {self.title}"

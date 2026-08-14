@@ -9,10 +9,17 @@ from django.test import TestCase
 from django.utils import timezone
 
 from courses.models import Course
-from learning.admin import CourseModuleAdmin, CourseTopicAdmin, LessonAdmin
+from learning.admin import (
+    CourseModuleAdmin,
+    CourseTopicAdmin,
+    LearningMaterialAdmin,
+    LessonAdmin,
+)
 from learning.models import (
     CourseModule,
     CourseTopic,
+    LearningMaterial,
+    LearningMaterialType,
     Lesson,
     LessonType,
     ReleaseType,
@@ -274,3 +281,66 @@ class LearningStructureModelTests(TestCase):
         self.assertIsInstance(admin.site._registry[CourseModule], CourseModuleAdmin)
         self.assertIsInstance(admin.site._registry[CourseTopic], CourseTopicAdmin)
         self.assertIsInstance(admin.site._registry[Lesson], LessonAdmin)
+
+    def test_creates_learning_material_with_metadata_and_audit(self):
+        lesson = self.make_lesson()
+
+        material = LearningMaterial.objects.create(
+            lesson=lesson,
+            course=self.course,
+            title="Course handbook",
+            description="Release 1 handbook",
+            type=LearningMaterialType.PDF,
+            file="learning/materials/handbook.pdf",
+            original_filename="handbook.pdf",
+            mime_type="application/pdf",
+            size=1024,
+            extension="pdf",
+            download_allowed=True,
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        self.assertEqual(material.lesson, lesson)
+        self.assertEqual(material.course, self.course)
+        self.assertEqual(material.size, 1024)
+        self.assertEqual(material.created_by, self.user)
+        self.assertIn("Course handbook", str(material))
+
+    def test_supports_all_release1_material_types(self):
+        self.assertEqual(
+            {value for value, _label in LearningMaterialType.choices},
+            {
+                "pdf",
+                "doc",
+                "docx",
+                "ppt",
+                "pptx",
+                "image",
+                "audio",
+                "video",
+                "external_link",
+                "library_link",
+                "other",
+            },
+        )
+
+    def test_material_course_must_match_lesson_course(self):
+        material = LearningMaterial(
+            lesson=self.make_lesson(),
+            course=self.other_course,
+            title="Foreign material",
+            type=LearningMaterialType.OTHER,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Material course must match the lesson course.",
+        ):
+            material.full_clean()
+
+    def test_learning_material_is_registered_in_admin(self):
+        self.assertIsInstance(
+            admin.site._registry[LearningMaterial],
+            LearningMaterialAdmin,
+        )

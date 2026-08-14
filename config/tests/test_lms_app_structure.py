@@ -30,7 +30,7 @@ class LMSAppStructureTests(SimpleTestCase):
                     [],
                 )
 
-    def test_learning_contains_only_release1_structure_models(self):
+    def test_learning_contains_only_release1_models(self):
         model_names = {
             model.__name__
             for model in apps.get_app_config("learning").get_models()
@@ -38,5 +38,10 @@ class LMSAppStructureTests(SimpleTestCase):
 
         self.assertEqual(
             model_names,
-            {"CourseModule", "CourseTopic", "Lesson"},
+            {
+                "CourseModule",
+                "CourseTopic",
+                "Lesson",
+                "LearningMaterial",
+            },
         )
