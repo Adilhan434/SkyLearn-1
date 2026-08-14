@@ -123,6 +123,20 @@ class CourseStructureAPITests(APITestCase):
             kwargs={"pk": module.pk},
         )
 
+    @staticmethod
+    def topic_create_url(module):
+        return reverse(
+            "api-v1:learning-v1:topic-create",
+            kwargs={"module_pk": module.pk},
+        )
+
+    @staticmethod
+    def topic_detail_url(topic):
+        return reverse(
+            "api-v1:learning-v1:topic-detail",
+            kwargs={"pk": topic.pk},
+        )
+
     def test_structure_requires_authentication(self):
         response = self.client.get(self.url)
 
@@ -445,5 +459,224 @@ class CourseStructureAPITests(APITestCase):
         self.client.force_authenticate(self.manager)
 
         response = self.client.get(self.module_detail_url(module))
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_manager_can_create_topic_with_audit_fields(self):
+        module = CourseModule.objects.create(
+            course=self.course,
+            title="Topic Parent",
+            order=1,
+        )
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.topic_create_url(module),
+            {
+                "title": "Programming Basics",
+                "description": "Topic description",
+                "order": 1,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        topic = CourseTopic.objects.get(pk=response.data["id"])
+        self.assertEqual(topic.module, module)
+        self.assertEqual(topic.created_by, self.manager)
+        self.assertEqual(topic.updated_by, self.manager)
+
+    def test_create_topic_without_order_appends_to_module(self):
+        module = CourseModule.objects.create(
+            course=self.course,
+            title="Topic Parent",
+            order=1,
+        )
+        CourseTopic.objects.create(module=module, title="First", order=1)
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.topic_create_url(module),
+            {"title": "Second"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["order"], 2)
+
+    def test_create_topic_rejects_duplicate_order(self):
+        module = CourseModule.objects.create(
+            course=self.course,
+            title="Topic Parent",
+            order=1,
+        )
+        CourseTopic.objects.create(module=module, title="First", order=1)
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.topic_create_url(module),
+            {"title": "Duplicate", "order": 1},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("order", response.data["error"]["fields"])
+
+    def test_assigned_teacher_can_create_and_patch_topic(self):
+        module = CourseModule.objects.create(
+            course=self.course,
+            title="Teacher Topic Parent",
+            order=1,
+        )
+        self.client.force_authenticate(self.teacher)
+        create_response = self.client.post(
+            self.topic_create_url(module),
+            {"title": "Teacher Topic"},
+            format="json",
+        )
+        topic = CourseTopic.objects.get(pk=create_response.data["id"])
+
+        patch_response = self.client.patch(
+            self.topic_detail_url(topic),
+            {"title": "Updated Teacher Topic"},
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
+        topic.refresh_from_db()
+        self.assertEqual(topic.title, "Updated Teacher Topic")
+        self.assertEqual(topic.updated_by, self.teacher)
+
+    def test_unassigned_teacher_cannot_create_topic(self):
+        module = CourseModule.objects.create(
+            course=self.course,
+            title="Foreign Topic Parent",
+            order=1,
+        )
+        teacher = get_user_model().objects.create_user(
+            username="foreign-topic-teacher"
+        )
+        teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
+        self.client.force_authenticate(teacher)
+
+        response = self.client.post(
+            self.topic_create_url(module),
+            {"title": "Foreign Topic"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_archived_course_topic_cannot_be_changed(self):
+        module = CourseModule.objects.create(
+            course=self.course,
+            title="Archived Topic Parent",
+            order=1,
+        )
+        topic = CourseTopic.objects.create(
+            module=module,
+            title="Archived Topic",
+            order=1,
+        )
+        self.course.status = "archived"
+        self.course.save(update_fields=("status",))
+        self.client.force_authenticate(self.manager)
+
+        create_response = self.client.post(
+            self.topic_create_url(module),
+            {"title": "Forbidden Topic"},
+            format="json",
+        )
+        patch_response = self.client.patch(
+            self.topic_detail_url(topic),
+            {"title": "Forbidden update"},
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(patch_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_empty_topic_can_be_deleted_without_confirmation(self):
+        module = CourseModule.objects.create(
+            course=self.course,
+            title="Empty Topic Parent",
+            order=1,
+        )
+        topic = CourseTopic.objects.create(
+            module=module,
+            title="Empty Topic",
+            order=1,
+        )
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.delete(self.topic_detail_url(topic))
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(CourseTopic.objects.filter(pk=topic.pk).exists())
+
+    def test_non_empty_topic_requires_delete_confirmation(self):
+        structure = self.create_structure()
+        topic = structure["first_topic"]
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.delete(self.topic_detail_url(topic))
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["error"]["code"], "structure_not_empty")
+        self.assertTrue(CourseTopic.objects.filter(pk=topic.pk).exists())
+
+    def test_confirmed_topic_delete_cascades_internal_dependencies(self):
+        structure = self.create_structure()
+        topic = structure["first_topic"]
+        first_lesson = structure["first_lesson"]
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.delete(
+            self.topic_detail_url(topic),
+            {"confirm": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(CourseTopic.objects.filter(pk=topic.pk).exists())
+        self.assertFalse(Lesson.objects.filter(pk=first_lesson.pk).exists())
+
+    def test_external_dependency_blocks_confirmed_topic_delete(self):
+        structure = self.create_structure()
+        source_topic = structure["first_topic"]
+        external_topic = structure["second_topic"]
+        Lesson.objects.create(
+            topic=external_topic,
+            title="External Topic Dependency",
+            order=1,
+            release_type=ReleaseType.AFTER_LESSON,
+            required_lesson=structure["first_lesson"],
+        )
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.delete(
+            self.topic_detail_url(source_topic),
+            {"confirm": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertTrue(CourseTopic.objects.filter(pk=source_topic.pk).exists())
+
+    def test_topic_detail_does_not_expose_unrequired_get(self):
+        module = CourseModule.objects.create(
+            course=self.course,
+            title="No Topic Retrieve Parent",
+            order=1,
+        )
+        topic = CourseTopic.objects.create(
+            module=module,
+            title="No Topic Retrieve",
+            order=1,
+        )
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.get(self.topic_detail_url(topic))
 
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)

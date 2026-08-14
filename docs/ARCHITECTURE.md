@@ -167,6 +167,9 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/{id}/modules/` | Append or explicitly order a module | Structure-manage permission |
 | `PATCH /api/v1/modules/{id}/` | Update module metadata and release settings | Structure-manage permission |
 | `DELETE /api/v1/modules/{id}/` | Safely delete a module | Structure-manage permission |
+| `POST /api/v1/modules/{id}/topics/` | Append or explicitly order a topic | Structure-manage permission |
+| `PATCH /api/v1/topics/{id}/` | Update topic metadata and order | Structure-manage permission |
+| `DELETE /api/v1/topics/{id}/` | Safely delete a topic | Structure-manage permission |
 | `POST /api/v1/courses/{id}/submit-review/` | Submit Draft/Needs Revision course | Submit-review permission |
 | `POST /api/v1/courses/{id}/return-for-revision/` | Return Under Review course with a comment | Review permission |
 | `POST /api/v1/courses/{id}/publish/` | Publish an Under Review course | Publish permission |
@@ -191,6 +194,8 @@ Deleting an empty module needs no confirmation. Deleting a module containing
 topics requires a JSON body of `{"confirm": true}`; otherwise the API returns
 `409 structure_not_empty`. Even a confirmed deletion is rejected when one of
 the module's lessons is a prerequisite for a lesson outside that module.
+Topic deletion follows the same confirmation contract and rejects a cascade
+when one of its lessons is required by a lesson outside the topic.
 
 ## 6. Database and runtime
 
