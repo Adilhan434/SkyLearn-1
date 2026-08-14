@@ -279,6 +279,30 @@ class LearningMaterialAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "invalid_file_type")
+        self.assertIn("file", response.data["error"]["fields"])
+        self.assertFalse(LearningMaterial.objects.exists())
+
+    @override_settings(MATERIAL_MAX_UPLOAD_SIZE=4)
+    def test_upload_rejects_oversized_file_with_stable_code(self):
+        self.client.force_authenticate(self.manager)
+
+        response = self.client.post(
+            self.lesson_material_url(),
+            {
+                "title": "Large PDF",
+                "type": LearningMaterialType.PDF,
+                "file": SimpleUploadedFile(
+                    "large.pdf",
+                    b"%PDF-1.7",
+                    content_type="application/pdf",
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"]["code"], "file_too_large")
         self.assertIn("file", response.data["error"]["fields"])
         self.assertFalse(LearningMaterial.objects.exists())
 

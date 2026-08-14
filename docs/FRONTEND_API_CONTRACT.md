@@ -58,17 +58,23 @@ The frontend must branch on `error.code`, never on human-readable text:
 }
 ```
 
-Common codes are `validation_error`, `authentication_failed`,
+Common codes are `validation_error`, `authentication_required`,
+`authentication_failed`,
 `permission_denied`, `not_found`, `method_not_allowed` and
 `internal_server_error`. Domain-specific codes are documented with the
 corresponding screen.
+
+`authentication_required` means credentials were not supplied.
+`authentication_failed` means supplied login data or a token is invalid or
+expired. Frontend logic must branch on `error.code`, never on localized
+`error.message`.
 
 ## 2. Screen-to-endpoint matrix
 
 | Screen | Method and endpoint | Auth / permission | Query or request | Response / errors |
 |---|---|---|---|---|
 | Login | `POST /api/v1/auth/login/` | Public | `{login, password}`; `login` accepts username, email or student ID-style username | User summary and auth cookies; `authentication_failed`, `validation_error` |
-| Current User | `GET /api/v1/auth/me/` | Authenticated | None | User, roles, effective permissions and optional student profile; `authentication_failed` |
+| Current User | `GET /api/v1/auth/me/` | Authenticated | None | User, roles, effective permissions and optional student profile; `authentication_required`, `authentication_failed` |
 | Teacher Dashboard | `GET /api/v1/courses/` | `courses.view`, assigned-course scope | Course filters and pagination | Assigned courses. No dedicated teacher aggregate endpoint in Release 1 |
 | Admin Dashboard | `GET /api/v1/courses/` plus `GET /api/v1/calendar/events/` | Global course scope and relevant permissions | Filters and pagination | Course/calendar operational data. No dedicated admin metrics endpoint in Release 1 |
 | Courses | `GET /api/v1/courses/` | `courses.view` | See Course filters | Paginated compact courses; `permission_denied` |
@@ -76,10 +82,10 @@ corresponding screen.
 | Edit Course | `PATCH /api/v1/courses/{id}/` | `courses.edit` plus object scope | Partial Course write payload | Updated course; `not_found`, `permission_denied`, `validation_error` |
 | Course Detail | `GET /api/v1/courses/{id}/` | `courses.view` plus object scope | None | Full metadata and lifecycle state; `not_found` |
 | Course Builder | `GET /api/v1/courses/{id}/structure/` | `courses.view` plus object scope | None | Nested Module -> Topic -> Lesson tree |
-| Module | `POST /api/v1/courses/{id}/modules/`; `PATCH/DELETE /api/v1/modules/{id}/` | `course_structure.manage` plus object scope | Module payload; delete may require `{confirm:true}` | Module data; `invalid_structure_order`, `structure_not_empty` |
+| Module | `POST /api/v1/courses/{id}/modules/`; `PATCH/DELETE /api/v1/modules/{id}/` | `course_structure.manage` plus object scope | Module payload; delete may require `{confirm:true}` | Module data; `invalid_release_condition`, `invalid_structure_order`, `structure_not_empty` |
 | Topic | `POST /api/v1/modules/{id}/topics/`; `PATCH/DELETE /api/v1/topics/{id}/` | `course_structure.manage` plus object scope | Topic payload; delete may require `{confirm:true}` | Topic data; `invalid_structure_order`, `structure_not_empty` |
-| Lesson | `POST /api/v1/topics/{id}/lessons/`; `GET/PATCH/DELETE /api/v1/lessons/{id}/` | Structure permission plus object scope | Lesson payload | Lesson data; release validation errors, `lesson_is_required` |
-| Materials | `GET/POST /api/v1/lessons/{id}/materials/`; `GET/PATCH/DELETE /api/v1/materials/{id}/` | Method-specific `materials.*` permission plus object scope | JSON for links, multipart for files | Safe material metadata; validation, permission and file errors |
+| Lesson | `POST /api/v1/topics/{id}/lessons/`; `GET/PATCH/DELETE /api/v1/lessons/{id}/` | Structure permission plus object scope | Lesson payload | Lesson data; `invalid_release_condition`, `lesson_is_required` |
+| Materials | `GET/POST /api/v1/lessons/{id}/materials/`; `GET/PATCH/DELETE /api/v1/materials/{id}/` | Method-specific `materials.*` permission plus object scope | JSON for links, multipart for files | Safe material metadata; `invalid_file_type`, `file_too_large`, validation and permission errors |
 | Course Preview | `GET /api/v1/courses/{id}/`; `GET /api/v1/courses/{id}/structure/`; `GET /api/v1/courses/{id}/materials/` | Course/material view permission and object scope | Material filters when required | Composed preview. There is no separate preview endpoint |
 | Course Readiness | `GET /api/v1/courses/{id}/readiness/` | `courses.view` plus object scope | None | Score, readiness flag and checks; `not_found` |
 | Review | `POST /api/v1/courses/{id}/submit-review/`; `POST /api/v1/courses/{id}/return-for-revision/` | `courses.submit_review` or `courses.review` | Return requires `{comment}` | Updated course; `course_not_ready`, `invalid_course_transition`, `validation_error` |

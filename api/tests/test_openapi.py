@@ -134,6 +134,24 @@ class OpenApiTests(APITestCase):
         self.assertIn("lesson_is_required", lesson["description"])
         self.assertIn("409", lesson["responses"])
 
+        lesson_create = self.schema["paths"]["/api/v1/topics/{topic_pk}/lessons/"][
+            "post"
+        ]
+        self.assertIn("invalid_release_condition", lesson_create["description"])
+        material_upload = self.schema["paths"][
+            "/api/v1/lessons/{lesson_pk}/materials/"
+        ]["post"]
+        self.assertIn("invalid_file_type", material_upload["description"])
+        self.assertIn("file_too_large", material_upload["description"])
+
+        auth_examples = components["responses"]["AuthenticationError"]["content"][
+            "application/json"
+        ]["examples"]
+        self.assertSetEqual(
+            set(auth_examples),
+            {"authentication_required", "authentication_failed"},
+        )
+
     def test_schema_documents_filters_and_pagination(self):
         expected_parameters = {
             "/api/v1/courses/": {

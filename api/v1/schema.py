@@ -150,9 +150,21 @@ DOMAIN_ERROR_CODES = {
     "/archive/": ("invalid_course_transition",),
     "/restore/": ("invalid_course_transition",),
     "/structure/reorder/": ("invalid_structure_order",),
-    "/api/v1/modules/{id}/": ("structure_not_empty",),
+    "/api/v1/courses/{course_pk}/modules/": ("invalid_release_condition",),
+    "/api/v1/modules/{id}/": (
+        "invalid_release_condition",
+        "structure_not_empty",
+    ),
+    "/api/v1/topics/{topic_pk}/lessons/": ("invalid_release_condition",),
+    "/api/v1/lessons/{lesson_pk}/materials/": (
+        "invalid_file_type",
+        "file_too_large",
+    ),
     "/api/v1/topics/{id}/": ("structure_not_empty",),
-    "/api/v1/lessons/{id}/": ("lesson_is_required",),
+    "/api/v1/lessons/{id}/": (
+        "invalid_release_condition",
+        "lesson_is_required",
+    ),
     "/download/": (
         "material_download_not_allowed",
         "material_file_unavailable",
@@ -297,8 +309,8 @@ def _register_error_components(result):
             ),
             "AuthenticationError": _error_response(
                 "Authentication is missing, invalid or expired.",
-                "authentication_failed",
-                "Authentication failed.",
+                "authentication_required",
+                "Authentication is required.",
             ),
             "PermissionDeniedError": _error_response(
                 "The authenticated user lacks permission.",
@@ -322,6 +334,18 @@ def _register_error_components(result):
             ),
         }
     )
+    responses["AuthenticationError"]["content"]["application/json"]["examples"][
+        "authentication_failed"
+    ] = {
+        "summary": "Credentials are invalid or expired.",
+        "value": {
+            "error": {
+                "code": "authentication_failed",
+                "message": "Authentication failed.",
+                "fields": {},
+            }
+        },
+    }
 
 
 def _add_explicit_examples(path, method, operation):

@@ -330,6 +330,14 @@ class CourseStructureAPITests(APITestCase):
             invalid_type_response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
+        self.assertEqual(
+            missing_date_response.data["error"]["code"],
+            "invalid_release_condition",
+        )
+        self.assertEqual(
+            invalid_type_response.data["error"]["code"],
+            "invalid_release_condition",
+        )
         self.assertIn("release_at", missing_date_response.data["error"]["fields"])
         self.assertIn(
             "release_type",
@@ -518,9 +526,7 @@ class CourseStructureAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(response.data["error"]["code"], "structure_not_empty")
-        self.assertTrue(
-            CourseModule.objects.filter(pk=first_module.pk).exists()
-        )
+        self.assertTrue(CourseModule.objects.filter(pk=first_module.pk).exists())
 
     def test_module_detail_does_not_expose_unrequired_get(self):
         module = CourseModule.objects.create(
@@ -640,9 +646,7 @@ class CourseStructureAPITests(APITestCase):
             title="Foreign Topic Parent",
             order=1,
         )
-        teacher = get_user_model().objects.create_user(
-            username="foreign-topic-teacher"
-        )
+        teacher = get_user_model().objects.create_user(username="foreign-topic-teacher")
         teacher.roles.add(Role.objects.get(code=RoleCode.TEACHER))
         self.client.force_authenticate(teacher)
 
@@ -872,6 +876,15 @@ class CourseStructureAPITests(APITestCase):
 
         for response in (invalid_lesson_type, missing_date, missing_required):
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            invalid_lesson_type.data["error"]["code"],
+            "validation_error",
+        )
+        for response in (missing_date, missing_required):
+            self.assertEqual(
+                response.data["error"]["code"],
+                "invalid_release_condition",
+            )
         self.assertIn(
             "lesson_type",
             invalid_lesson_type.data["error"]["fields"],
@@ -1170,9 +1183,7 @@ class CourseStructureAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error"]["code"], "invalid_structure_order"
-        )
+        self.assertEqual(response.data["error"]["code"], "invalid_structure_order")
         structure["first_module"].refresh_from_db()
         structure["second_module"].refresh_from_db()
         self.assertEqual(structure["first_module"].order, 1)
@@ -1195,9 +1206,7 @@ class CourseStructureAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error"]["code"], "invalid_structure_order"
-        )
+        self.assertEqual(response.data["error"]["code"], "invalid_structure_order")
 
     def test_reorder_requires_complete_sibling_list(self):
         structure = self.create_structure()
@@ -1213,9 +1222,7 @@ class CourseStructureAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error"]["code"], "invalid_structure_order"
-        )
+        self.assertEqual(response.data["error"]["code"], "invalid_structure_order")
 
     def test_reorder_rejects_items_with_different_parents(self):
         structure = self.create_structure()
@@ -1239,9 +1246,7 @@ class CourseStructureAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error"]["code"], "invalid_structure_order"
-        )
+        self.assertEqual(response.data["error"]["code"], "invalid_structure_order")
 
     def test_reorder_rejects_item_from_another_course(self):
         structure = self.create_structure()
@@ -1276,9 +1281,7 @@ class CourseStructureAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error"]["code"], "invalid_structure_order"
-        )
+        self.assertEqual(response.data["error"]["code"], "invalid_structure_order")
 
     def test_unassigned_teacher_cannot_reorder_structure(self):
         structure = self.create_structure()

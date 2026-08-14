@@ -6,6 +6,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from api.v1.exceptions import CodedAPIException
 from audit.models import CourseHistoryAction, CourseHistoryObjectType
 from audit.services import record_course_history_event
 from courses.models import Course
@@ -25,6 +26,21 @@ from learning.models import (
 from learning.reordering import InvalidStructureOrder
 from learning.scorm import validate_scorm_package
 from learning.video_processing import VideoProcessingService
+
+
+class InvalidReleaseCondition(CodedAPIException):
+    error_code = "invalid_release_condition"
+    default_detail = "Release condition is invalid."
+
+
+class InvalidFileType(CodedAPIException):
+    error_code = "invalid_file_type"
+    default_detail = "Uploaded file type or content is invalid."
+
+
+class FileTooLarge(CodedAPIException):
+    error_code = "file_too_large"
+    default_detail = "Uploaded file exceeds the size limit."
 
 
 class StructureLessonSerializer(serializers.ModelSerializer):
@@ -118,7 +134,9 @@ class CourseModuleWriteSerializer(serializers.ModelSerializer):
             ).choices
         }
         if value not in allowed_values:
-            raise serializers.ValidationError("Invalid module release type.")
+            raise InvalidReleaseCondition(
+                fields={"release_type": ["Invalid module release type."]}
+            )
         return value
 
     def validate(self, attrs):
@@ -132,12 +150,12 @@ class CourseModuleWriteSerializer(serializers.ModelSerializer):
             getattr(instance, "release_at", None),
         )
         if release_type == "date" and release_at is None:
-            raise serializers.ValidationError(
-                {"release_at": "A date-based module requires release_at."}
+            raise InvalidReleaseCondition(
+                fields={"release_at": ["A date-based module requires release_at."]}
             )
         if release_type != "date" and release_at is not None:
-            raise serializers.ValidationError(
-                {"release_at": "release_at is allowed only for date release."}
+            raise InvalidReleaseCondition(
+                fields={"release_at": ["release_at is allowed only for date release."]}
             )
         return attrs
 
@@ -337,7 +355,9 @@ class LessonWriteSerializer(serializers.ModelSerializer):
 
     def validate_release_type(self, value):
         if value not in {choice for choice, _label in ReleaseType.choices}:
-            raise serializers.ValidationError("Invalid lesson release type.")
+            raise InvalidReleaseCondition(
+                fields={"release_type": ["Invalid lesson release type."]}
+            )
         return value
 
     def validate(self, attrs):
@@ -386,7 +406,7 @@ class LessonWriteSerializer(serializers.ModelSerializer):
                 errors,
             )
         if errors:
-            raise serializers.ValidationError(errors)
+            raise InvalidReleaseCondition(fields=errors)
         return attrs
 
     @staticmethod
@@ -628,7 +648,12 @@ class LearningMaterialSerializer(serializers.ModelSerializer):
                         material_type,
                     )
                 except ValidationError as exc:
-                    raise serializers.ValidationError(exc.message_dict) from exc
+                    exception_class = (
+                        FileTooLarge
+                        if getattr(exc, "error_code", None) == "file_too_large"
+                        else InvalidFileType
+                    )
+                    raise exception_class(fields=exc.message_dict) from exc
                 attrs.update(metadata.as_model_fields())
         return attrs
 

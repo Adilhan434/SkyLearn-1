@@ -10,6 +10,18 @@ from PIL import Image, UnidentifiedImageError
 from learning.models import LearningMaterialType
 
 
+class InvalidFileTypeError(ValidationError):
+    """A material upload is empty, unsafe or does not match its declared type."""
+
+    error_code = "invalid_file_type"
+
+
+class FileTooLargeError(ValidationError):
+    """A material upload exceeds the configured size limit."""
+
+    error_code = "file_too_large"
+
+
 EXECUTABLE_EXTENSIONS = {
     "apk",
     "app",
@@ -102,13 +114,9 @@ def _validate_double_extension(filename, extension):
     suffixes = [suffix.lower().lstrip(".") for suffix in Path(filename).suffixes]
     recognized = set().union(*EXTENSIONS_BY_TYPE.values(), EXECUTABLE_EXTENSIONS)
     if any(suffix in recognized for suffix in suffixes[:-1]):
-        raise ValidationError(
-            {"file": "Double extensions are not allowed."}
-        )
+        raise InvalidFileTypeError({"file": "Double extensions are not allowed."})
     if extension in EXECUTABLE_EXTENSIONS:
-        raise ValidationError(
-            {"file": "Executable file formats are not allowed."}
-        )
+        raise InvalidFileTypeError({"file": "Executable file formats are not allowed."})
 
 
 def _validate_office_zip(uploaded_file, extension):
@@ -122,15 +130,15 @@ def _validate_office_zip(uploaded_file, extension):
         with ZipFile(uploaded_file) as archive:
             names = set(archive.namelist())
             if expected_member not in names:
-                raise ValidationError(
+                raise InvalidFileTypeError(
                     {"file": "Office document content does not match its extension."}
                 )
             if any(item.flag_bits & 0x1 for item in archive.infolist()):
-                raise ValidationError(
+                raise InvalidFileTypeError(
                     {"file": "Encrypted office documents are not supported."}
                 )
     except BadZipFile as exc:
-        raise ValidationError(
+        raise InvalidFileTypeError(
             {"file": "Office document is not a valid ZIP container."}
         ) from exc
     finally:
@@ -150,12 +158,12 @@ def _validate_image(uploaded_file, extension):
         uploaded_file.seek(0)
         with Image.open(uploaded_file) as image:
             if image.format != expected_formats[extension]:
-                raise ValidationError(
+                raise InvalidFileTypeError(
                     {"file": "Image content does not match its extension."}
                 )
             image.verify()
     except (Image.DecompressionBombError, UnidentifiedImageError, OSError) as exc:
-        raise ValidationError({"file": "Image content is invalid."}) from exc
+        raise InvalidFileTypeError({"file": "Image content is invalid."}) from exc
     finally:
         uploaded_file.seek(position)
 
@@ -213,7 +221,7 @@ def _validate_declared_mime(uploaded_file, detected_mime):
     guessed_mime, _encoding = mimetypes.guess_type(uploaded_file.name)
     if declared_mime == guessed_mime == detected_mime:
         return
-    raise ValidationError(
+    raise InvalidFileTypeError(
         {"file": "Declared MIME type does not match file content."}
     )
 
@@ -225,9 +233,9 @@ def validate_material_file(uploaded_file, material_type):
     extension = Path(filename).suffix.lower().lstrip(".")
     size = uploaded_file.size
     if size == 0:
-        raise ValidationError({"file": "Empty files are not allowed."})
+        raise InvalidFileTypeError({"file": "Empty files are not allowed."})
     if size > settings.MATERIAL_MAX_UPLOAD_SIZE:
-        raise ValidationError(
+        raise FileTooLargeError(
             {
                 "file": (
                     "File exceeds the maximum upload size of "
@@ -239,21 +247,19 @@ def validate_material_file(uploaded_file, material_type):
     _validate_double_extension(filename, extension)
     allowed_extensions = EXTENSIONS_BY_TYPE.get(material_type)
     if not allowed_extensions or extension not in allowed_extensions:
-        raise ValidationError(
+        raise InvalidFileTypeError(
             {"file": "File extension does not match the material type."}
         )
 
     head = _read_head(uploaded_file)
     if _looks_executable(head):
-        raise ValidationError(
-            {"file": "Executable file content is not allowed."}
-        )
+        raise InvalidFileTypeError({"file": "Executable file content is not allowed."})
     if extension in {"docx", "pptx"}:
         _validate_office_zip(uploaded_file, extension)
     elif extension in {"gif", "jpeg", "jpg", "png", "webp"}:
         _validate_image(uploaded_file, extension)
     elif not _content_matches(extension, head):
-        raise ValidationError(
+        raise InvalidFileTypeError(
             {"file": "File content does not match its extension."}
         )
 

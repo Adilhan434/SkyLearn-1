@@ -19,11 +19,11 @@ from .auth_serializers import (
 from .cookies import clear_auth_cookies, set_access_cookie, set_refresh_cookie
 
 
-def _authentication_error(message):
+def _authentication_error(message, code="authentication_failed"):
     return Response(
         {
             "error": {
-                "code": "authentication_failed",
+                "code": code,
                 "message": message,
                 "fields": {},
             }
@@ -70,12 +70,13 @@ class RefreshView(APIView):
         tags=["Auth"],
     )
     def post(self, request):
-        cookie_name = settings.SIMPLE_JWT.get(
-            "AUTH_COOKIE_REFRESH", "refresh_token"
-        )
+        cookie_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh_token")
         refresh_token = request.COOKIES.get(cookie_name)
         if not refresh_token:
-            return _authentication_error("Refresh token is missing.")
+            return _authentication_error(
+                "Refresh token is missing.",
+                code="authentication_required",
+            )
 
         serializer = TokenRefreshSerializer(data={"refresh": refresh_token})
         try:
@@ -103,9 +104,7 @@ class LogoutView(APIView):
         tags=["Auth"],
     )
     def post(self, request):
-        cookie_name = settings.SIMPLE_JWT.get(
-            "AUTH_COOKIE_REFRESH", "refresh_token"
-        )
+        cookie_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh_token")
         refresh_token = request.COOKIES.get(cookie_name)
         if refresh_token:
             try:

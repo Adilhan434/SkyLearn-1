@@ -49,7 +49,7 @@
 | Docker/PostgreSQL | `DONE` | `Dockerfile`, `docker-compose.yml`, PostgreSQL 16 | `config/tests/test_database.py`; Compose healthchecks | Автоматизированный production-container smoke test не входит в текущий CI |
 | Frontend API contract | `DONE` | `docs/FRONTEND_API_CONTRACT.md` | Проверена карта всех обязательных экранов | Teacher/Admin dashboards и Course Preview собираются из существующих ресурсов |
 | OpenAPI / Swagger | `DONE` | `/api/schema/`, `/api/docs/`, `/api/schema/redoc/` | `api/tests/test_openapi.py`; CLI schema validation | Все 50 Release 1 paths документируют security, permissions и errors; ключевые flows имеют explicit examples |
-| Unified API errors | `PARTIAL` | `api.v1.exceptions.custom_exception_handler` | `api/tests/test_errors.py` и domain error tests | Нужна финальная сверка всех минимальных кодов ТЗ и aliases authentication errors |
+| Unified API errors | `DONE` | `api.v1.exceptions.custom_exception_handler` | `api/tests/test_errors.py` и domain error tests | Отсутствующие credentials и неверные credentials намеренно имеют разные стабильные коды |
 | CI и coverage | `PARTIAL` | `.github/workflows/django.yml`, `pylint.yml`, `.coveragerc` | CI выполняет check, migrations, schema, full tests и coverage | `calendar_events` ещё нужно включить в Release 1 coverage source |
 | Fresh database flow | `PENDING` | `migrate -> seed_release1 -> check/runserver` | Будет проверено на чистой PostgreSQL database | Нужен отдельный финальный прогон без ручных изменений |
 | Security/secrets audit | `PENDING` | settings, environment, repository history/worktree | Запланирован отдельный scan | Финальный аудит перед PR ещё не выполнен |
@@ -87,9 +87,8 @@ Legacy apps `finance`, `attendance`, `result`, parent flows и их данные
 
 ## Что осталось перед Pull Request
 
-1. Сверить и дополнить минимальные error codes.
-2. Включить `calendar_events` в coverage и CI-проверку Release 1.
-3. Проверить fresh PostgreSQL database flow.
-4. Выполнить secrets/security audit.
-5. Запустить полный набор tests, coverage, migrations, OpenAPI и lint.
-6. Создать Pull Request в `develop`.
+1. Включить `calendar_events` в coverage и CI-проверку Release 1.
+2. Проверить fresh PostgreSQL database flow.
+3. Выполнить secrets/security audit.
+4. Запустить полный набор tests, coverage, migrations, OpenAPI и lint.
+5. Создать Pull Request в `develop`.
