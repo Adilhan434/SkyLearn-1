@@ -7,6 +7,7 @@ from courses.models import (
     CourseTeachingRole,
 )
 from enrollments.models import EnrollmentStatus
+from learning.models import CourseModule, CourseTopic, Lesson
 
 
 def student_courses_queryset(user):
@@ -32,4 +33,21 @@ def student_courses_queryset(user):
         )
         .order_by("code")
         .distinct()
+    )
+
+
+def student_course_detail_queryset(user):
+    """Student courses with their published learning structure prefetched."""
+
+    published_lessons = Lesson.objects.filter(is_published=True).prefetch_related(
+        "materials"
+    )
+    topics = CourseTopic.objects.prefetch_related(
+        Prefetch("lessons", queryset=published_lessons),
+    )
+    modules = CourseModule.objects.prefetch_related(
+        Prefetch("topics", queryset=topics),
+    )
+    return student_courses_queryset(user).prefetch_related(
+        Prefetch("modules", queryset=modules),
     )

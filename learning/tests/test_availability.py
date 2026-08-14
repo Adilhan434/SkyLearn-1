@@ -219,3 +219,27 @@ class LessonAvailabilityTests(TestCase):
         availability = evaluate_lesson_availability(lesson)
 
         self.assertTrue(availability.is_available)
+
+    def test_prefetched_structure_availability_does_not_issue_queries(self):
+        first_module = self.make_module(order=1)
+        first_topic = self.make_topic(first_module)
+        first = self.make_lesson(first_topic, order=1)
+        second = self.make_lesson(first_topic, order=2)
+        next_module = self.make_module(
+            order=2,
+            release_type=ReleaseType.AFTER_PREVIOUS,
+        )
+        self.make_lesson(self.make_topic(next_module))
+        prefetched_course = Course.objects.prefetch_related(
+            "modules__topics__lessons"
+        ).get(pk=self.course.pk)
+        target = list(list(prefetched_course.modules.all())[1].topics.all())[0]
+        target = list(target.lessons.all())[0]
+
+        with self.assertNumQueries(0):
+            availability = evaluate_lesson_availability(
+                target,
+                completed_lesson_ids={first.pk, second.pk},
+            )
+
+        self.assertTrue(availability.is_available)

@@ -1,4 +1,6 @@
 from datetime import date, timedelta
+from io import BytesIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -14,6 +16,14 @@ from courses.models import (
     CourseTeachingRole,
 )
 from enrollments.models import Enrollment, EnrollmentSource, EnrollmentStatus
+from learning.models import (
+    CourseModule,
+    CourseTopic,
+    LearningMaterial,
+    LearningMaterialType,
+    Lesson,
+    ReleaseType,
+)
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
@@ -306,6 +316,65 @@ class StudentCourseAPITests(APITestCase):
             kwargs={"pk": course.pk},
         )
 
+    def build_student_structure(self):
+        module = CourseModule.objects.create(
+            course=self.published_course,
+            title="Foundations",
+            description="Module description",
+            order=1,
+        )
+        topic = CourseTopic.objects.create(
+            module=module,
+            title="Introduction",
+            description="Topic description",
+            order=1,
+        )
+        first_lesson = Lesson.objects.create(
+            topic=topic,
+            title="First lesson",
+            content="Visible lesson content",
+            order=1,
+            is_published=True,
+        )
+        second_lesson = Lesson.objects.create(
+            topic=topic,
+            title="Second lesson",
+            content="Locked lesson secret",
+            order=2,
+            release_type=ReleaseType.AFTER_LESSON,
+            required_lesson=first_lesson,
+            is_published=True,
+        )
+        Lesson.objects.create(
+            topic=topic,
+            title="Internal unpublished lesson",
+            order=3,
+            is_published=False,
+        )
+        material = LearningMaterial.objects.create(
+            lesson=first_lesson,
+            course=self.published_course,
+            title="Student handbook",
+            type=LearningMaterialType.PDF,
+            file="learning/materials/student-handbook.pdf",
+            original_filename="student-handbook.pdf",
+            mime_type="application/pdf",
+            size=12,
+            extension="pdf",
+        )
+        locked_material = LearningMaterial.objects.create(
+            lesson=second_lesson,
+            course=self.published_course,
+            title="Locked handbook",
+            type=LearningMaterialType.PDF,
+            file="learning/materials/locked-handbook.pdf",
+            original_filename="locked-handbook.pdf",
+            mime_type="application/pdf",
+            size=12,
+            extension="pdf",
+        )
+        return first_lesson, second_lesson, material, locked_material
+
     def test_student_list_contains_only_own_active_published_courses(self):
         withdrawn = self.create_course(
             "Withdrawn Course",
@@ -358,6 +427,87 @@ class StudentCourseAPITests(APITestCase):
         self.assertNotIn("published_by", response.data)
         self.assertNotIn("created_by", response.data)
         self.assertNotIn("updated_by", response.data)
+
+    def test_detail_contains_published_structure_locks_and_materials(self):
+        (
+            first_lesson,
+            second_lesson,
+            material,
+            _locked_material,
+        ) = self.build_student_structure()
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get(self.detail_url(self.published_course))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["overall_progress"], 0)
+        modules = response.data["structure"]
+        self.assertEqual(len(modules), 1)
+        lessons = modules[0]["topics"][0]["lessons"]
+        self.assertEqual(
+            [item["id"] for item in lessons], [first_lesson.pk, second_lesson.pk]
+        )
+        self.assertEqual(lessons[0]["status"], "not_started")
+        self.assertTrue(lessons[0]["is_available"])
+        self.assertIsNone(lessons[0]["lock_reason"])
+        self.assertFalse(lessons[1]["is_available"])
+        self.assertEqual(
+            lessons[1]["lock_reason"],
+            "Complete the required lesson.",
+        )
+        self.assertIsNone(lessons[1]["content"])
+        self.assertEqual(lessons[1]["materials"], [])
+        self.assertEqual(lessons[0]["materials"][0]["id"], material.pk)
+        self.assertNotIn("created_by", lessons[0]["materials"][0])
+        self.assertEqual(
+            lessons[0]["materials"][0]["download_url"],
+            reverse(
+                "api-v1:learning-v1:material-download",
+                kwargs={"pk": material.pk},
+            ),
+        )
+
+    def test_enrolled_student_can_download_nested_course_material(self):
+        (
+            _first_lesson,
+            _second_lesson,
+            material,
+            locked_material,
+        ) = self.build_student_structure()
+        self.client.force_authenticate(self.student)
+
+        with patch.object(
+            material.file.storage,
+            "open",
+            return_value=BytesIO(b"student file"),
+        ):
+            response = self.client.get(
+                reverse(
+                    "api-v1:learning-v1:material-download",
+                    kwargs={"pk": material.pk},
+                )
+            )
+            content = b"".join(response.streaming_content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(content, b"student file")
+
+        locked_response = self.client.get(
+            reverse(
+                "api-v1:learning-v1:material-download",
+                kwargs={"pk": locked_material.pk},
+            )
+        )
+        self.assertEqual(locked_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(self.other_student)
+        foreign_response = self.client.get(
+            reverse(
+                "api-v1:learning-v1:material-download",
+                kwargs={"pk": material.pk},
+            )
+        )
+        self.assertEqual(foreign_response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_unavailable_student_course_details_return_not_found(self):
         draft = self.create_course("Draft Course", "DRAFT-2", CourseStatus.DRAFT)

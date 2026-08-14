@@ -31,6 +31,7 @@ from learning.permissions import (
     MaterialPermission,
     StructureManagePermission,
     StructureObjectPermission,
+    course_content_accessible_to,
 )
 from learning.reordering import reorder_structure
 from learning.scorm import stream_scorm_member
@@ -278,7 +279,7 @@ def material_queryset_for(user):
         "lesson",
         "lesson__topic",
         "lesson__topic__module",
-    ).filter(course__in=courses_accessible_to(user))
+    ).filter(course__in=course_content_accessible_to(user))
 
 
 class LessonMaterialListCreateView(generics.ListCreateAPIView):
@@ -288,7 +289,9 @@ class LessonMaterialListCreateView(generics.ListCreateAPIView):
     def get_lesson(self):
         lesson = get_object_or_404(
             Lesson.objects.select_related("topic__module__course").filter(
-                topic__module__course__in=courses_accessible_to(self.request.user)
+                topic__module__course__in=course_content_accessible_to(
+                    self.request.user
+                )
             ),
             pk=self.kwargs["lesson_pk"],
         )
@@ -330,7 +333,7 @@ class CourseMaterialListView(generics.ListAPIView):
 
     def get_course(self):
         course = get_object_or_404(
-            courses_accessible_to(self.request.user),
+            course_content_accessible_to(self.request.user),
             pk=self.kwargs["pk"],
         )
         self.check_object_permissions(self.request, course)
@@ -374,6 +377,7 @@ class MaterialDownloadNotAllowed(CodedAPIException):
 
 class LearningMaterialDownloadView(generics.GenericAPIView):
     permission_classes = (MaterialPermission,)
+    allow_student_access = True
 
     @extend_schema(responses={(200, "application/octet-stream"): OpenApiTypes.BINARY})
     def get(self, request, *args, **kwargs):
@@ -403,6 +407,7 @@ class VideoNotReady(CodedAPIException):
 
 class LearningMaterialPlaybackView(generics.GenericAPIView):
     permission_classes = (MaterialPermission,)
+    allow_student_access = True
 
     @extend_schema(responses={(200, "video/*"): OpenApiTypes.BINARY})
     def get(self, request, *args, **kwargs):

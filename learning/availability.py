@@ -19,6 +19,12 @@ def _locked(reason):
 
 
 def _previous_module(module):
+    course = module.course
+    if "modules" in getattr(course, "_prefetched_objects_cache", {}):
+        candidates = [
+            item for item in course.modules.all() if item.order < module.order
+        ]
+        return max(candidates, key=lambda item: (item.order, item.pk), default=None)
     return (
         CourseModule.objects.filter(
             course_id=module.course_id,
@@ -30,6 +36,12 @@ def _previous_module(module):
 
 
 def _previous_lesson(lesson):
+    topic = lesson.topic
+    if "lessons" in getattr(topic, "_prefetched_objects_cache", {}):
+        candidates = [
+            item for item in topic.lessons.all() if item.order < lesson.order
+        ]
+        return max(candidates, key=lambda item: (item.order, item.pk), default=None)
     return (
         Lesson.objects.filter(
             topic_id=lesson.topic_id,
@@ -37,6 +49,25 @@ def _previous_lesson(lesson):
         )
         .order_by("-order", "-id")
         .first()
+    )
+
+
+def _published_lesson_ids(module):
+    if "topics" in getattr(module, "_prefetched_objects_cache", {}):
+        lesson_ids = set()
+        for topic in module.topics.all():
+            if "lessons" not in getattr(topic, "_prefetched_objects_cache", {}):
+                break
+            lesson_ids.update(
+                lesson.pk for lesson in topic.lessons.all() if lesson.is_published
+            )
+        else:
+            return lesson_ids
+    return set(
+        Lesson.objects.filter(
+            topic__module=module,
+            is_published=True,
+        ).values_list("id", flat=True)
     )
 
 
@@ -61,12 +92,7 @@ def evaluate_lesson_availability(
     elif module.release_type == ReleaseType.AFTER_PREVIOUS:
         previous_module = _previous_module(module)
         if previous_module is not None:
-            previous_lesson_ids = set(
-                Lesson.objects.filter(
-                    topic__module=previous_module,
-                    is_published=True,
-                ).values_list("id", flat=True)
-            )
+            previous_lesson_ids = _published_lesson_ids(previous_module)
             if not previous_lesson_ids.issubset(completed_ids):
                 return _locked("Complete the previous module.")
 

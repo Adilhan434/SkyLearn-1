@@ -160,8 +160,13 @@ courses for which the current user has an Active enrollment. Draft, Under
 Review, Archived, withdrawn and other students' courses therefore resolve to
 404 at the detail endpoint and never appear in the list. Student serializers
 exclude review, publication-owner and audit fields. Nested structure, lesson
-availability and progress are added by the dedicated Student Course Detail
-task.
+availability and safe material metadata are included in Student Course Detail.
+Only published lessons are exposed. Each lesson contains `status`,
+`is_available` and `lock_reason`; release checks use the prefetched hierarchy
+without per-lesson queries. Until `LessonProgress` is introduced by its
+dedicated task, statuses are `not_started` and `overall_progress` is `0`.
+Protected material download and video playback accept an enrolled Student but
+continue to reject users without an Active enrollment in the Published course.
 
 ## 4. Organization and Course relationships
 
