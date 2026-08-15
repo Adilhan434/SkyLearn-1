@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from audit.models import CourseHistoryAction, CourseHistoryEvent
-from courses.models import CourseStatus
+from courses.models import Course, CourseStatus
 from organization.models import Program, Semester
 
 
@@ -291,3 +291,109 @@ class Release1AcceptanceTests(APITestCase):
                 CourseHistoryAction.ARCHIVED,
             }.issubset(history_actions)
         )
+
+    def test_student_can_complete_published_enrolled_course_flow(self):
+        student_login = self.client.post(
+            reverse("api-v1:auth:login"),
+            {
+                "login": "student@su.edu.kg",
+                "password": self.demo_password,
+            },
+            format="json",
+        )
+        self.assertEqual(student_login.status_code, status.HTTP_200_OK)
+
+        student_courses = self.client.get(reverse("api-v1:student-v1:course-list"))
+        self.assertEqual(student_courses.status_code, status.HTTP_200_OK)
+        self.assertGreater(student_courses.data["count"], 0)
+        self.assertTrue(
+            all(
+                course["status"] == CourseStatus.PUBLISHED
+                for course in student_courses.data["results"]
+            )
+        )
+        visible_course_ids = {
+            course["id"] for course in student_courses.data["results"]
+        }
+        course_id = student_courses.data["results"][0]["id"]
+
+        course_detail = self.client.get(
+            reverse("api-v1:student-v1:course-detail", kwargs={"pk": course_id})
+        )
+        self.assertEqual(course_detail.status_code, status.HTTP_200_OK)
+        lessons = [
+            lesson
+            for module in course_detail.data["structure"]
+            for topic in module["topics"]
+            for lesson in topic["lessons"]
+        ]
+        lesson = next(item for item in lessons if item["is_available"])
+
+        lesson_detail = self.client.get(
+            reverse(
+                "api-v1:student-v1:lesson-detail",
+                kwargs={"pk": lesson["id"]},
+            )
+        )
+        self.assertEqual(lesson_detail.status_code, status.HTTP_200_OK)
+        self.assertTrue(lesson_detail.data["is_available"])
+
+        start_lesson = self.client.post(
+            reverse(
+                "api-v1:progress-v1:lesson-start",
+                kwargs={"pk": lesson["id"]},
+            )
+        )
+        self.assertIn(
+            start_lesson.status_code,
+            {status.HTTP_200_OK, status.HTTP_201_CREATED},
+        )
+        self.assertEqual(start_lesson.data["status"], "in_progress")
+
+        complete_lesson = self.client.post(
+            reverse(
+                "api-v1:progress-v1:lesson-complete",
+                kwargs={"pk": lesson["id"]},
+            )
+        )
+        self.assertIn(
+            complete_lesson.status_code,
+            {status.HTTP_200_OK, status.HTTP_201_CREATED},
+        )
+        self.assertEqual(complete_lesson.data["status"], "completed")
+
+        course_progress = self.client.get(
+            reverse(
+                "api-v1:progress-v1:course-progress",
+                kwargs={"pk": course_id},
+            )
+        )
+        self.assertEqual(course_progress.status_code, status.HTTP_200_OK)
+        self.assertEqual(course_progress.data["completed_lessons"], 1)
+        self.assertGreater(course_progress.data["progress_percent"], 0)
+
+        calendar = self.client.get(reverse("api-v1:student-calendar-v1:event-list"))
+        self.assertEqual(calendar.status_code, status.HTTP_200_OK)
+        self.assertGreater(calendar.data["count"], 0)
+
+        hidden_courses = Course.objects.exclude(pk__in=visible_course_ids)
+        hidden_statuses = set(hidden_courses.values_list("status", flat=True))
+        self.assertTrue(
+            {
+                CourseStatus.DRAFT,
+                CourseStatus.UNDER_REVIEW,
+                CourseStatus.ARCHIVED,
+            }.issubset(hidden_statuses)
+        )
+        for hidden_course in hidden_courses:
+            with self.subTest(course=hidden_course.code):
+                hidden_detail = self.client.get(
+                    reverse(
+                        "api-v1:student-v1:course-detail",
+                        kwargs={"pk": hidden_course.pk},
+                    )
+                )
+                self.assertEqual(
+                    hidden_detail.status_code,
+                    status.HTTP_404_NOT_FOUND,
+                )

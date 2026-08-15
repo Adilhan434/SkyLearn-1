@@ -46,6 +46,7 @@ class OpenApiTests(APITestCase):
         "/api/v1/course-templates/{id}/create-course/",
         "/api/v1/student/courses/",
         "/api/v1/student/courses/{id}/",
+        "/api/v1/student/lessons/{id}/",
         "/api/v1/student/dashboard/",
         "/api/v1/student/progress/",
         "/api/v1/student/courses/{id}/progress/",

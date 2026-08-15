@@ -51,3 +51,17 @@ def student_course_detail_queryset(user):
     return student_courses_queryset(user).prefetch_related(
         Prefetch("modules", queryset=modules),
     )
+
+
+def student_lessons_queryset(user):
+    """Published lessons belonging to the student's visible courses."""
+
+    return (
+        Lesson.objects.filter(
+            is_published=True,
+            topic__module__course__in=student_courses_queryset(user),
+        )
+        .select_related("topic__module__course", "required_lesson")
+        .prefetch_related("materials")
+        .distinct()
+    )

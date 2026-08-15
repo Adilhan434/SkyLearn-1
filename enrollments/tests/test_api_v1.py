@@ -317,6 +317,12 @@ class StudentCourseAPITests(APITestCase):
             kwargs={"pk": course.pk},
         )
 
+    def lesson_detail_url(self, lesson):
+        return reverse(
+            "api-v1:student-v1:lesson-detail",
+            kwargs={"pk": lesson.pk},
+        )
+
     def build_student_structure(self):
         module = CourseModule.objects.create(
             course=self.published_course,
@@ -468,6 +474,50 @@ class StudentCourseAPITests(APITestCase):
             ),
         )
 
+    def test_student_lesson_detail_respects_release_availability(self):
+        first_lesson, second_lesson, material, _ = self.build_student_structure()
+        self.client.force_authenticate(self.student)
+
+        available = self.client.get(self.lesson_detail_url(first_lesson))
+        locked = self.client.get(self.lesson_detail_url(second_lesson))
+
+        self.assertEqual(available.status_code, status.HTTP_200_OK)
+        self.assertTrue(available.data["is_available"])
+        self.assertEqual(available.data["content"], "Visible lesson content")
+        self.assertEqual(available.data["materials"][0]["id"], material.pk)
+        self.assertEqual(locked.status_code, status.HTTP_200_OK)
+        self.assertFalse(locked.data["is_available"])
+        self.assertIsNone(locked.data["content"])
+        self.assertEqual(locked.data["materials"], [])
+
+    def test_student_lesson_detail_hides_unavailable_courses(self):
+        foreign_course = self.create_course(
+            "Foreign Course",
+            "FOREIGN-LESSON",
+            CourseStatus.PUBLISHED,
+        )
+        foreign_module = CourseModule.objects.create(
+            course=foreign_course,
+            title="Foreign Module",
+            order=1,
+        )
+        foreign_topic = CourseTopic.objects.create(
+            module=foreign_module,
+            title="Foreign Topic",
+            order=1,
+        )
+        foreign_lesson = Lesson.objects.create(
+            topic=foreign_topic,
+            title="Foreign Lesson",
+            order=1,
+            is_published=True,
+        )
+        self.client.force_authenticate(self.student)
+
+        response = self.client.get(self.lesson_detail_url(foreign_lesson))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_enrolled_student_can_download_nested_course_material(self):
         (
             first_lesson,
@@ -581,4 +631,9 @@ class StudentCourseAPITests(APITestCase):
         self.assertEqual(
             self.detail_url(self.published_course),
             f"/api/v1/student/courses/{self.published_course.pk}/",
+        )
+        first_lesson, _, _, _ = self.build_student_structure()
+        self.assertEqual(
+            self.lesson_detail_url(first_lesson),
+            f"/api/v1/student/lessons/{first_lesson.pk}/",
         )
