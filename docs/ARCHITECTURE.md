@@ -303,6 +303,7 @@ The versioned API is mounted in `api.v1.urls`:
 | `POST /api/v1/courses/{id}/enrollments/` | Manually enroll or reactivate a Student | Enrollment-manage permission and course access |
 | `GET /api/v1/student/courses/` | Paginated courses available to the current Student | Student role and course-view permission |
 | `GET /api/v1/student/courses/{id}/` | Safe enrolled Course metadata | Student role and active enrollment |
+| `GET /api/v1/student/lessons/{id}/` | Safe lesson detail with availability, progress and materials | Student role, active enrollment and Published course |
 | `POST /api/v1/student/lessons/{id}/start/` | Idempotently mark an available lesson in progress | Student role and active enrollment |
 | `POST /api/v1/student/lessons/{id}/complete/` | Idempotently complete an available lesson | Student role and active enrollment |
 | `GET /api/v1/student/progress/` | Aggregate operational progress for the Student | Student role and active enrollments |

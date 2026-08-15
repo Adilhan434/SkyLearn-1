@@ -38,7 +38,7 @@
 | Course Copy | `DONE` | `POST /api/v1/courses/{id}/copy/` | Course copy tests | Файлы ссылаются на существующие storage objects; enrollment/progress/history не копируются |
 | Course Templates | `DONE` | `/api/v1/course-templates/`, `create-course/`; `CourseTemplate` | Course template tests | Update/delete template endpoints отложены |
 | Enrollment | `DONE` | `/api/v1/courses/{id}/enrollments/`; `Enrollment` | enrollment model/API tests | Bulk UI import не входит в ручной endpoint |
-| Student Courses | `DONE` | `/api/v1/student/courses/`, `/courses/{id}/` | `enrollments/tests/test_api_v1.py` | Возвращаются только активные enrollment на Published-курсы |
+| Student Courses | `DONE` | `/api/v1/student/courses/`, `/courses/{id}/`, `/student/lessons/{id}/` | `enrollments/tests/test_api_v1.py` | Возвращаются только активные enrollment на Published-курсы; locked lesson не раскрывает контент |
 | Basic Progress | `DONE` | Student dashboard/progress/start/complete endpoints; `LessonProgress` | `progress/tests/test_api_v1.py` | Нет Gradebook, оценок и learning analytics |
 | Calendar | `DONE` | `/api/v1/calendar/events/`, `/api/v1/student/calendar/`; `CalendarEvent` | `calendar_events/tests/test_calendar_api.py` | Нет внешней календарной синхронизации |
 | Audit fields | `DONE` | `AuditModel`, `AuditAdminMixin` | audit и model/admin tests | Полный field-level Audit Log отложен |
@@ -48,12 +48,13 @@
 | Django Admin | `DONE` | Все обязательные Release 1 models зарегистрированы | model/admin registration tests | Admin используется для development/debug и не заменяет REST API |
 | Docker/PostgreSQL | `DONE` | `Dockerfile`, `docker-compose.yml`, PostgreSQL 16 | `config/tests/test_database.py`; Compose healthchecks | Автоматизированный production-container smoke test не входит в текущий CI |
 | Frontend API contract | `DONE` | `docs/FRONTEND_API_CONTRACT.md` | Проверена карта всех обязательных экранов | Teacher/Admin dashboards и Course Preview собираются из существующих ресурсов |
-| OpenAPI / Swagger | `DONE` | `/api/schema/`, `/api/docs/`, `/api/schema/redoc/` | `api/tests/test_openapi.py`; CLI schema validation | Все 50 Release 1 paths документируют security, permissions и errors; ключевые flows имеют explicit examples |
+| OpenAPI / Swagger | `DONE` | `/api/schema/`, `/api/docs/`, `/api/schema/redoc/` | `api/tests/test_openapi.py`; CLI schema validation | Все 51 Release 1 paths документируют security, permissions и errors; ключевые flows имеют explicit examples |
 | Unified API errors | `DONE` | `api.v1.exceptions.custom_exception_handler` | `api/tests/test_errors.py` и domain error tests | Отсутствующие credentials и неверные credentials намеренно имеют разные стабильные коды |
 | CI и coverage | `DONE` | `.github/workflows/django.yml`, `pylint.yml`, `.coveragerc` | CI выполняет check, migrations, schema, full tests, coverage и Pylint для всех Release 1 apps, включая `calendar_events` | GitHub-hosted прогон окончательно подтверждается после push |
 | Fresh database flow | `DONE` | `migrate -> seed_release1 -> check -> health` | Проверено на изолированной чистой PostgreSQL 18.3 database; повторный seed сохранил стабильные counts | Временная verification database удалена после успешного прогона |
 | Security/secrets audit | `DONE` | `docs/SECURITY_AUDIT.md`; settings, environment, Git history and dependencies | Маскированный secrets scan, `pip-audit`, `pip check`, deploy check и критические тесты | `X_FRAME_OPTIONS=SAMEORIGIN` намеренно сохранён для same-origin SCORM и документирован |
-| Full regression and Definition of Done | `DONE` | Полный Release 1 backend на Django 5.2/PostgreSQL | 500 tests; 97% coverage; migrations, OpenAPI, dependency audit и Pylint 10/10 | Локальный regression завершён; GitHub-hosted CI подтверждается после push |
+| Acceptance scenarios 91–95 | `DONE` | Teacher, Content Manager, Admin, Student и Locked Lesson HTTP flows | `api/tests/test_release1_acceptance.py` | Все пять сценариев проходят автоматически на PostgreSQL; Teacher flow выполняется через HTTP без прямых записей в DB |
+| Full regression and Definition of Done | `DONE` | Полный Release 1 backend на Django 5.2/PostgreSQL | 507 tests; 97% coverage; migrations, OpenAPI, dependency audit и Pylint 10/10 | Локальный regression завершён; GitHub-hosted CI подтверждается после push |
 
 ## Известные ограничения Release 1
 
