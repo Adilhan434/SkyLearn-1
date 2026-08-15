@@ -7,6 +7,7 @@ from rest_framework.test import APITestCase
 
 from audit.models import CourseHistoryAction, CourseHistoryEvent
 from courses.models import Course, CourseStatus
+from learning.models import Lesson, ReleaseType
 from organization.models import Program, Semester
 
 
@@ -397,3 +398,80 @@ class Release1AcceptanceTests(APITestCase):
                     hidden_detail.status_code,
                     status.HTTP_404_NOT_FOUND,
                 )
+
+    def test_required_lesson_unlocks_only_after_prerequisite_completion(self):
+        course = Course.objects.filter(status=CourseStatus.PUBLISHED).first()
+        lessons = list(
+            Lesson.objects.filter(topic__module__course=course).order_by(
+                "topic__module__order",
+                "topic__order",
+                "order",
+                "id",
+            )[:2]
+        )
+        self.assertEqual(len(lessons), 2)
+        prerequisite, dependent = lessons
+        dependent.release_type = ReleaseType.AFTER_LESSON
+        dependent.required_lesson = prerequisite
+        dependent.full_clean()
+        dependent.save(update_fields=("release_type", "required_lesson", "updated_at"))
+
+        student_login = self.client.post(
+            reverse("api-v1:auth:login"),
+            {
+                "login": "student@su.edu.kg",
+                "password": self.demo_password,
+            },
+            format="json",
+        )
+        self.assertEqual(student_login.status_code, status.HTTP_200_OK)
+
+        dependent_url = reverse(
+            "api-v1:student-v1:lesson-detail",
+            kwargs={"pk": dependent.pk},
+        )
+        locked_lesson = self.client.get(dependent_url)
+        self.assertEqual(locked_lesson.status_code, status.HTTP_200_OK)
+        self.assertFalse(locked_lesson.data["is_available"])
+        self.assertEqual(
+            locked_lesson.data["lock_reason"],
+            "Complete the required lesson.",
+        )
+        self.assertIsNone(locked_lesson.data["content"])
+
+        locked_start = self.client.post(
+            reverse(
+                "api-v1:progress-v1:lesson-start",
+                kwargs={"pk": dependent.pk},
+            )
+        )
+        self.assertEqual(locked_start.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(locked_start.data["error"]["code"], "lesson_locked")
+
+        prerequisite_start = self.client.post(
+            reverse(
+                "api-v1:progress-v1:lesson-start",
+                kwargs={"pk": prerequisite.pk},
+            )
+        )
+        self.assertIn(
+            prerequisite_start.status_code,
+            {status.HTTP_200_OK, status.HTTP_201_CREATED},
+        )
+        prerequisite_complete = self.client.post(
+            reverse(
+                "api-v1:progress-v1:lesson-complete",
+                kwargs={"pk": prerequisite.pk},
+            )
+        )
+        self.assertIn(
+            prerequisite_complete.status_code,
+            {status.HTTP_200_OK, status.HTTP_201_CREATED},
+        )
+        self.assertEqual(prerequisite_complete.data["status"], "completed")
+
+        unlocked_lesson = self.client.get(dependent_url)
+        self.assertEqual(unlocked_lesson.status_code, status.HTTP_200_OK)
+        self.assertTrue(unlocked_lesson.data["is_available"])
+        self.assertIsNone(unlocked_lesson.data["lock_reason"])
+        self.assertEqual(unlocked_lesson.data["content"], dependent.content)
