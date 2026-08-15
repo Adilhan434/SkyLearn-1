@@ -230,3 +230,64 @@ class Release1AcceptanceTests(APITestCase):
             teacher_course_detail.data["review_comment"],
             review_comment,
         )
+
+    def test_admin_can_publish_copy_archive_and_read_complete_history(self):
+        admin_login = self.client.post(
+            reverse("api-v1:auth:login"),
+            {
+                "login": "admin@su.edu.kg",
+                "password": self.demo_password,
+            },
+            format="json",
+        )
+        self.assertEqual(admin_login.status_code, status.HTTP_200_OK)
+
+        under_review_courses = self.client.get(
+            reverse("api-v1:courses-v1:list-create"),
+            {"status": CourseStatus.UNDER_REVIEW},
+        )
+        self.assertEqual(under_review_courses.status_code, status.HTTP_200_OK)
+        self.assertGreater(under_review_courses.data["count"], 0)
+        course_id = under_review_courses.data["results"][0]["id"]
+
+        course_detail = self.client.get(
+            reverse("api-v1:courses-v1:detail", kwargs={"pk": course_id})
+        )
+        self.assertEqual(course_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(course_detail.data["status"], CourseStatus.UNDER_REVIEW)
+
+        publish = self.client.post(
+            reverse("api-v1:courses-v1:publish", kwargs={"pk": course_id})
+        )
+        self.assertEqual(publish.status_code, status.HTTP_200_OK)
+        self.assertEqual(publish.data["status"], CourseStatus.PUBLISHED)
+
+        copy = self.client.post(
+            reverse("api-v1:courses-v1:copy", kwargs={"pk": course_id}),
+            {
+                "title": "Admin Acceptance Copy",
+                "code": "E2E-ADM-COPY-101",
+            },
+            format="json",
+        )
+        self.assertEqual(copy.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(copy.data["status"], CourseStatus.DRAFT)
+
+        archive = self.client.post(
+            reverse("api-v1:courses-v1:archive", kwargs={"pk": course_id})
+        )
+        self.assertEqual(archive.status_code, status.HTTP_200_OK)
+        self.assertEqual(archive.data["status"], CourseStatus.ARCHIVED)
+
+        history = self.client.get(
+            reverse("api-v1:courses-v1:history", kwargs={"pk": course_id})
+        )
+        self.assertEqual(history.status_code, status.HTTP_200_OK)
+        history_actions = {event["action"] for event in history.data["results"]}
+        self.assertTrue(
+            {
+                CourseHistoryAction.PUBLISHED,
+                CourseHistoryAction.COPIED,
+                CourseHistoryAction.ARCHIVED,
+            }.issubset(history_actions)
+        )

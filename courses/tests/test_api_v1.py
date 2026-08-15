@@ -1060,6 +1060,20 @@ class CourseAPITests(APITestCase):
                 "source_course_code": self.course.code,
             },
         )
+        source_event = CourseHistoryEvent.objects.get(
+            course=self.course,
+            action=CourseHistoryAction.COPIED,
+        )
+        self.assertEqual(source_event.actor, self.user)
+        self.assertEqual(source_event.object_id, copied.pk)
+        self.assertEqual(source_event.object_title, copied.title)
+        self.assertEqual(
+            source_event.details,
+            {
+                "target_course_id": copied.pk,
+                "target_course_code": copied.code,
+            },
+        )
 
     def test_copy_requires_authentication_and_copy_permission(self):
         anonymous_response = self.client.post(

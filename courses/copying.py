@@ -309,4 +309,16 @@ def copy_course(source, title, code, actor):
             "source_course_code": source.code,
         },
     )
+    record_course_history_event(
+        course=source,
+        action=CourseHistoryAction.COPIED,
+        actor=actor,
+        object_type=CourseHistoryObjectType.COURSE,
+        object_id=copied_course.pk,
+        object_title=copied_course.title,
+        details={
+            "target_course_id": copied_course.pk,
+            "target_course_code": copied_course.code,
+        },
+    )
     return copied_course
