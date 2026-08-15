@@ -148,3 +148,85 @@ class Release1AcceptanceTests(APITestCase):
                 action=CourseHistoryAction.SUBMITTED_FOR_REVIEW,
             ).exists()
         )
+
+    def test_content_manager_can_return_course_for_revision(self):
+        manager_login = self.client.post(
+            reverse("api-v1:auth:login"),
+            {
+                "login": "content@su.edu.kg",
+                "password": self.demo_password,
+            },
+            format="json",
+        )
+        self.assertEqual(manager_login.status_code, status.HTTP_200_OK)
+
+        courses_url = reverse("api-v1:courses-v1:list-create")
+        under_review_courses = self.client.get(
+            courses_url,
+            {"status": CourseStatus.UNDER_REVIEW},
+        )
+        self.assertEqual(under_review_courses.status_code, status.HTTP_200_OK)
+        self.assertGreater(under_review_courses.data["count"], 0)
+        course_id = under_review_courses.data["results"][0]["id"]
+
+        course_detail_url = reverse(
+            "api-v1:courses-v1:detail",
+            kwargs={"pk": course_id},
+        )
+        course_detail = self.client.get(course_detail_url)
+        self.assertEqual(course_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(course_detail.data["status"], CourseStatus.UNDER_REVIEW)
+
+        course_structure = self.client.get(
+            reverse(
+                "api-v1:courses-v1:structure",
+                kwargs={"pk": course_id},
+            )
+        )
+        self.assertEqual(course_structure.status_code, status.HTTP_200_OK)
+
+        course_materials = self.client.get(
+            reverse(
+                "api-v1:courses-v1:material-list",
+                kwargs={"pk": course_id},
+            )
+        )
+        self.assertEqual(course_materials.status_code, status.HTTP_200_OK)
+
+        review_comment = "Add learning outcomes and revise the lesson materials."
+        return_for_revision = self.client.post(
+            reverse(
+                "api-v1:courses-v1:return-for-revision",
+                kwargs={"pk": course_id},
+            ),
+            {"comment": review_comment},
+            format="json",
+        )
+        self.assertEqual(return_for_revision.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            return_for_revision.data["status"],
+            CourseStatus.NEEDS_REVISION,
+        )
+        self.assertEqual(return_for_revision.data["review_comment"], review_comment)
+
+        self.client.cookies.clear()
+        teacher_login = self.client.post(
+            reverse("api-v1:auth:login"),
+            {
+                "login": "teacher@su.edu.kg",
+                "password": self.demo_password,
+            },
+            format="json",
+        )
+        self.assertEqual(teacher_login.status_code, status.HTTP_200_OK)
+
+        teacher_course_detail = self.client.get(course_detail_url)
+        self.assertEqual(teacher_course_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            teacher_course_detail.data["status"],
+            CourseStatus.NEEDS_REVISION,
+        )
+        self.assertEqual(
+            teacher_course_detail.data["review_comment"],
+            review_comment,
+        )
