@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.test import SimpleTestCase
 
-
 LOCAL_FRONTEND_ORIGIN = "http://localhost:5173"
 
 
@@ -16,16 +15,14 @@ class FrontendSecuritySettingsTests(SimpleTestCase):
         self.assertNotIn("*", settings.CORS_ALLOWED_ORIGINS)
 
     def test_cors_middleware_runs_before_common_middleware(self):
-        cors_index = settings.MIDDLEWARE.index(
-            "corsheaders.middleware.CorsMiddleware"
-        )
+        cors_index = settings.MIDDLEWARE.index("corsheaders.middleware.CorsMiddleware")
         common_index = settings.MIDDLEWARE.index(
             "django.middleware.common.CommonMiddleware"
         )
         self.assertLess(cors_index, common_index)
-        self.assertEqual(settings.MIDDLEWARE.count(
-            "django.middleware.common.CommonMiddleware"
-        ), 1)
+        self.assertEqual(
+            settings.MIDDLEWARE.count("django.middleware.common.CommonMiddleware"), 1
+        )
 
     def test_csrf_middleware_is_enabled(self):
         self.assertIn(
@@ -36,9 +33,12 @@ class FrontendSecuritySettingsTests(SimpleTestCase):
     def test_jwt_cookie_security_defaults(self):
         self.assertTrue(settings.SIMPLE_JWT["AUTH_COOKIE_HTTP_ONLY"])
         self.assertEqual(settings.SIMPLE_JWT["AUTH_COOKIE_SAMESITE"], "Lax")
-        self.assertIsInstance(
-            settings.SIMPLE_JWT["AUTH_COOKIE_SECURE"], bool
-        )
+        self.assertIsInstance(settings.SIMPLE_JWT["AUTH_COOKIE_SECURE"], bool)
+
+    def test_production_hsts_flags_are_environment_configurable(self):
+        self.assertIsInstance(settings.SECURE_HSTS_SECONDS, int)
+        self.assertIsInstance(settings.SECURE_HSTS_INCLUDE_SUBDOMAINS, bool)
+        self.assertIsInstance(settings.SECURE_HSTS_PRELOAD, bool)
 
     def test_cors_preflight_returns_origin_and_credentials_headers(self):
         response = self.client.options(

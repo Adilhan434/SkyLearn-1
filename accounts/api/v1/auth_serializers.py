@@ -96,7 +96,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         return list(obj.roles.order_by("code").values_list("code", flat=True))
 
     def get_permissions(self, obj) -> list[str]:
-        return sorted(obj.get_all_permissions())
+        return sorted(obj.get_lms_permissions())
 
     @extend_schema_field(StudentProfileSerializer(allow_null=True))
     def get_profile(self, obj) -> dict | None:

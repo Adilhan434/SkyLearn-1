@@ -36,7 +36,7 @@ Copy-Item .env.example .env
 
 ```dotenv
 DJANGO_DEBUG=True
-SECRET_KEY="django-insecure-local-development-only"
+SECRET_KEY="change-me-use-at-least-50-random-characters-for-this-value"
 DATABASE_URL=postgresql://postgres:replace-with-local-password@localhost:5432/su_lms
 EMAIL_BACKEND="django.core.mail.backends.console.EmailBackend"
 ```
@@ -225,6 +225,14 @@ EMAIL_BACKEND="django.core.mail.backends.console.EmailBackend"
 ```
 
 Письма будут отображаться в терминале.
+
+### Production security flags
+
+После настройки HTTPS в production задайте `SECURE_SSL_REDIRECT=True`,
+`SESSION_COOKIE_SECURE=True`, `CSRF_COOKIE_SECURE=True` и подходящее значение
+`SECURE_HSTS_SECONDS`. Параметры `SECURE_HSTS_INCLUDE_SUBDOMAINS` и
+`SECURE_HSTS_PRELOAD` включайте только после проверки HTTPS на всех поддоменах.
+Для локальной HTTP-разработки эти флаги должны оставаться выключенными.
 
 ## 14. Опциональный запуск через Docker
 

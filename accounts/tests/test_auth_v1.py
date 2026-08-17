@@ -68,6 +68,7 @@ class AuthV1Tests(APITestCase):
         response = self.login(password="incorrect-password")
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.json()["error"]["code"], "authentication_failed")
 
     def test_inactive_user_cannot_login(self):
         self.user.is_active = False
@@ -90,6 +91,7 @@ class AuthV1Tests(APITestCase):
         response = self.client.get(reverse("api-v1:auth:me"))
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.json()["error"]["code"], "authentication_required")
 
     def test_me_returns_stable_user_contract_from_access_cookie(self):
         self.login()
@@ -107,7 +109,12 @@ class AuthV1Tests(APITestCase):
                 "full_name": "Student Demo",
                 "is_active": True,
                 "roles": ["student"],
-                "permissions": [],
+                "permissions": [
+                    "calendar.view",
+                    "course_structure.view",
+                    "courses.view",
+                    "materials.view",
+                ],
                 "profile": {
                     "student_id": "SU-2024-0012",
                     "group": "CS-22-24",
@@ -123,6 +130,11 @@ class AuthV1Tests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["roles"], ["student", "teacher"])
+        self.assertIn("courses.edit", response.json()["permissions"])
+        self.assertEqual(
+            response.json()["permissions"],
+            sorted(response.json()["permissions"]),
+        )
 
     def test_me_allows_missing_email_and_non_student_profile(self):
         user = User.objects.create_user(
@@ -174,6 +186,7 @@ class AuthV1Tests(APITestCase):
         response = self.client.post(reverse("api-v1:auth:refresh"))
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.json()["error"]["code"], "authentication_required")
 
     def test_logout_clears_cookies_and_blacklists_refresh_token(self):
         login_response = self.login()
@@ -198,9 +211,7 @@ class AuthV1Tests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_cookie_authentication_is_registered_for_openapi(self):
-        extension = OpenApiAuthenticationExtension.get_match(
-            JWTCookieAuthentication()
-        )
+        extension = OpenApiAuthenticationExtension.get_match(JWTCookieAuthentication())
 
         self.assertIsNotNone(extension)
         self.assertEqual(extension.name, "cookieAuth")
@@ -210,8 +221,6 @@ class AuthV1Tests(APITestCase):
                 "type": "apiKey",
                 "in": "cookie",
                 "name": "access_token",
-                "description": (
-                    "JWT access token stored in an httpOnly cookie."
-                ),
+                "description": ("JWT access token stored in an httpOnly cookie."),
             },
         )

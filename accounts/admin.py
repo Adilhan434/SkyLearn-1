@@ -1,11 +1,25 @@
 from django.contrib import admin
-from .models import Parent, Role, Student, User, UserRole
+from .models import (
+    LMSPermission,
+    Parent,
+    Role,
+    RolePermission,
+    Student,
+    User,
+    UserRole,
+)
 
 
 class UserRoleInline(admin.TabularInline):
     model = UserRole
     extra = 0
     autocomplete_fields = ["role"]
+
+
+class RolePermissionInline(admin.TabularInline):
+    model = RolePermission
+    extra = 0
+    autocomplete_fields = ["permission"]
 
 
 class UserAdmin(admin.ModelAdmin):
@@ -39,6 +53,7 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
+    inlines = [RolePermissionInline]
     list_display = ["code", "name"]
     search_fields = ["code", "name"]
 
@@ -49,6 +64,20 @@ class UserRoleAdmin(admin.ModelAdmin):
     list_filter = ["role"]
     search_fields = ["user__username", "user__email", "role__code"]
     autocomplete_fields = ["user", "role"]
+
+
+@admin.register(LMSPermission)
+class LMSPermissionAdmin(admin.ModelAdmin):
+    list_display = ["code", "name"]
+    search_fields = ["code", "name"]
+
+
+@admin.register(RolePermission)
+class RolePermissionAdmin(admin.ModelAdmin):
+    list_display = ["role", "permission", "assigned_at"]
+    list_filter = ["role"]
+    search_fields = ["role__code", "permission__code"]
+    autocomplete_fields = ["role", "permission"]
 
 
 admin.site.register(User, UserAdmin)

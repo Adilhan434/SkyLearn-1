@@ -6,8 +6,13 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
-from courses.admin import CourseAdmin
-from courses.models import Course, CourseLanguage, CourseStatus
+from courses.admin import CourseAdmin, CourseTemplateAdmin
+from courses.models import (
+    Course,
+    CourseLanguage,
+    CourseStatus,
+    CourseTemplate,
+)
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
 
 
@@ -67,7 +72,14 @@ class CourseModelTests(TestCase):
     def test_course_code_is_unique(self):
         self.make_course()
         with self.assertRaises(IntegrityError):
-            self.make_course(title="Duplicate course")
+            self.make_course(title="Duplicate course", code="cs101")
+
+    def test_course_code_is_trimmed_and_normalized(self):
+        course = self.make_course(code="  cs-101  ")
+
+        self.assertEqual(course.code, "CS-101")
+        course.refresh_from_db()
+        self.assertEqual(course.code, "CS-101")
 
     def test_course_dates_must_be_ordered(self):
         course = Course(
@@ -129,6 +141,30 @@ class CourseModelTests(TestCase):
     def test_course_is_registered_in_admin(self):
         self.assertIsInstance(admin.site._registry[Course], CourseAdmin)
 
-    def test_teacher_content_models_are_not_added_to_courses_app(self):
+    def test_course_template_model_and_admin(self):
+        template = CourseTemplate.objects.create(
+            title="Starter",
+            description="Reusable structure",
+            snapshot={"version": 1, "course": {}, "modules": []},
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        self.assertEqual(str(template), "Starter")
+        self.assertTrue(template.is_active)
+        self.assertIsInstance(
+            admin.site._registry[CourseTemplate],
+            CourseTemplateAdmin,
+        )
+
+    def test_course_domain_contains_teaching_assignment(self):
         app_models = {model.__name__ for model in Course._meta.app_config.get_models()}
-        self.assertEqual(app_models, {"Course"})
+        self.assertEqual(
+            app_models,
+            {
+                "Course",
+                "CourseTeachingAssignment",
+                "CourseStatusHistory",
+                "CourseTemplate",
+            },
+        )

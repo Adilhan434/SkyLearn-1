@@ -16,8 +16,36 @@ must not delete Organization or Course records. Nullable values also allow
 data migrations, imports and automated system operations that have no acting
 user.
 
-This mechanism records ownership and timestamps only. It is not a complete
-Audit Log and does not store field-level history.
+This shared mechanism records ownership and timestamps only.
+
+`audit.CourseHistoryEvent` is the append-only course-scoped event store used by
+the Release 1 history API. It stores the acting user plus a snapshot of the
+affected object's type, ID and title, so delete events remain readable after
+the original Module, Topic, Lesson or Material has been removed. The optional
+`details` JSON object contains action-specific context; it must not contain
+secrets or complete field-level snapshots.
+
+The older `courses.CourseStatusHistory` model remains available while
+lifecycle writers are migrated to the common event store.
+
+Course creation and regular Course API updates already append
+`course_created` and `course_updated` events. Update events store only the
+names of changed request fields; request values and uploaded file contents are
+not copied into history details.
+
+Course Structure writes append create, update and delete events for Module,
+Topic and Lesson objects. A confirmed cascade delete records a snapshot event
+for every nested Topic and Lesson before the database rows are removed.
+
+Creating a file or link material appends `material_uploaded`; direct and
+cascade deletion append `material_deleted`. History details contain the public
+material type only and never expose storage paths, file contents or URLs.
+
+Lifecycle transitions append `submitted_for_review`,
+`returned_for_revision`, `published`, `archived` and `restored`, including the
+previous and resulting statuses. Course copy appends `copied` to the new course
+with the source course ID/code; creating from a template appends
+`course_created` with the template ID.
 
 ## Using the model
 

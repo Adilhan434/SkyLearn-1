@@ -1,6 +1,7 @@
 from django.http import Http404
 from rest_framework import status
 from rest_framework.exceptions import (
+    AuthenticationFailed,
     NotAuthenticated,
     PermissionDenied,
     ValidationError,
@@ -53,8 +54,14 @@ class ApiErrorFormatTests(APITestCase):
         )
         self.assertEqual(
             response.data["error"]["code"],
-            "authentication_failed",
+            "authentication_required",
         )
+
+    def test_invalid_authentication_has_distinct_error_code(self):
+        response = self.call_handler(AuthenticationFailed())
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["error"]["code"], "authentication_failed")
 
     def test_forbidden_error_format(self):
         response = self.call_handler(PermissionDenied())

@@ -26,7 +26,7 @@ def add_lecture():
         print(f"Course Allocation {'created' if created else 'already exists'}")
 
         # 2. Create Schedule Item
-        schedule, created = ScheduleItem.objects.get_or_create(
+        _, created = ScheduleItem.objects.get_or_create(
             course=course,
             group=group,
             lesson_time=lesson_time,

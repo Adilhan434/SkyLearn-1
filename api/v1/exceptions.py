@@ -1,19 +1,37 @@
 import logging
 
-from django.http import Http404
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import (
+    APIException,
+    AuthenticationFailed,
+    NotAuthenticated,
+    ValidationError,
+)
 from rest_framework.response import Response
 from rest_framework.views import exception_handler, set_rollback
 
 
 logger = logging.getLogger(__name__)
 
+
+class CodedAPIException(APIException):
+    """API exception with a stable frontend-facing error code."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "api_error"
+    default_detail = "API request failed."
+
+    def __init__(self, detail=None, *, fields=None, details=None):
+        self.error_fields = fields
+        self.error_details = details
+        super().__init__(detail=detail)
+
+
 ERROR_DEFAULTS = {
     status.HTTP_400_BAD_REQUEST: ("bad_request", "Bad request."),
     status.HTTP_401_UNAUTHORIZED: (
-        "authentication_failed",
-        "Authentication failed.",
+        "authentication_required",
+        "Authentication is required.",
     ),
     status.HTTP_403_FORBIDDEN: ("permission_denied", "Permission denied."),
     status.HTTP_404_NOT_FOUND: ("not_found", "Resource not found."),
@@ -69,6 +87,31 @@ def api_exception_handler(exc, context):
             "Validation failed.",
             _stringify_errors(response.data),
         )
+        return response
+
+    if isinstance(exc, NotAuthenticated):
+        response.data = build_error_payload(
+            "authentication_required",
+            "Authentication is required.",
+        )
+        return response
+
+    if isinstance(exc, AuthenticationFailed):
+        response.data = build_error_payload(
+            "authentication_failed",
+            str(exc.detail),
+        )
+        return response
+
+    if isinstance(exc, CodedAPIException):
+        payload = build_error_payload(
+            exc.error_code,
+            str(exc.detail),
+            exc.error_fields,
+        )
+        if exc.error_details is not None:
+            payload["error"]["details"] = exc.error_details
+        response.data = payload
         return response
 
     code, default_message = ERROR_DEFAULTS.get(

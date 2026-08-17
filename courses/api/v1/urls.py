@@ -1,11 +1,75 @@
 from django.urls import path
 
-from .views import CourseDetailView, CourseListCreateView
+from learning.api.v1.views import (
+    CourseModuleCreateView,
+    CourseMaterialListView,
+    CourseStructureView,
+    StructureReorderView,
+)
+from enrollments.api.v1.views import CourseEnrollmentListCreateView
+
+from .views import (
+    ArchiveCourseView,
+    CourseDetailView,
+    CourseCopyView,
+    CourseHistoryView,
+    CourseListCreateView,
+    CourseReadinessView,
+    PublishCourseView,
+    RestoreCourseView,
+    ReturnForRevisionView,
+    SubmitReviewView,
+)
 
 
 app_name = "courses-v1"
 
 urlpatterns = [
     path("", CourseListCreateView.as_view(), name="list-create"),
+    path(
+        "<int:course_pk>/enrollments/",
+        CourseEnrollmentListCreateView.as_view(),
+        name="enrollment-list-create",
+    ),
     path("<int:pk>/", CourseDetailView.as_view(), name="detail"),
+    path("<int:pk>/history/", CourseHistoryView.as_view(), name="history"),
+    path(
+        "<int:pk>/readiness/",
+        CourseReadinessView.as_view(),
+        name="readiness",
+    ),
+    path(
+        "<int:pk>/structure/",
+        CourseStructureView.as_view(),
+        name="structure",
+    ),
+    path(
+        "<int:pk>/materials/",
+        CourseMaterialListView.as_view(),
+        name="material-list",
+    ),
+    path(
+        "<int:course_pk>/modules/",
+        CourseModuleCreateView.as_view(),
+        name="module-create",
+    ),
+    path(
+        "<int:pk>/structure/reorder/",
+        StructureReorderView.as_view(),
+        name="structure-reorder",
+    ),
+    path(
+        "<int:pk>/submit-review/",
+        SubmitReviewView.as_view(),
+        name="submit-review",
+    ),
+    path(
+        "<int:pk>/return-for-revision/",
+        ReturnForRevisionView.as_view(),
+        name="return-for-revision",
+    ),
+    path("<int:pk>/publish/", PublishCourseView.as_view(), name="publish"),
+    path("<int:pk>/archive/", ArchiveCourseView.as_view(), name="archive"),
+    path("<int:pk>/restore/", RestoreCourseView.as_view(), name="restore"),
+    path("<int:pk>/copy/", CourseCopyView.as_view(), name="copy"),
 ]

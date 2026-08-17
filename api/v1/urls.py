@@ -12,5 +12,18 @@ urlpatterns = [
     path("users/", include("accounts.api.v1.user_urls")),
     path("roles/", include("accounts.api.v1.role_urls")),
     path("organization/", include("core.api.v1.organization_urls")),
+    path("student/", include("enrollments.api.v1.student_urls")),
+    path("student/", include("progress.api.v1.urls")),
+    path("student/", include("calendar_events.api.v1.student_urls")),
+    path("calendar/", include("calendar_events.api.v1.urls")),
+    path(
+        "integrations/sis/",
+        include("enrollments.api.v1.integration_urls"),
+    ),
+    path("", include("learning.api.v1.urls")),
     path("courses/", include("courses.api.v1.urls")),
+    path(
+        "course-templates/",
+        include("courses.api.v1.template_urls"),
+    ),
 ]

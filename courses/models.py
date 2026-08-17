@@ -1,7 +1,11 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
+from django.db.models.functions import Lower
 
+from accounts.models import RoleCode
 from audit.models import AuditModel
 from organization.models import Department, Faculty, Program, Semester
 
@@ -9,6 +13,7 @@ from organization.models import Department, Faculty, Program, Semester
 class CourseStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     UNDER_REVIEW = "under_review", "Under review"
+    NEEDS_REVISION = "needs_revision", "Needs revision"
     PUBLISHED = "published", "Published"
     ARCHIVED = "archived", "Archived"
 
@@ -23,7 +28,7 @@ class Course(AuditModel):
     """Release 1 course metadata, independent from the legacy core course."""
 
     title = models.CharField(max_length=255)
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(max_length=50)
     description = models.TextField(blank=True)
     language = models.CharField(
         max_length=10,
@@ -63,12 +68,27 @@ class Course(AuditModel):
     end_date = models.DateField()
     cover = models.ImageField(upload_to="courses/covers/", blank=True)
     syllabus = models.FileField(upload_to="courses/syllabi/", blank=True)
+    review_comment = models.TextField(blank=True)
+    published_at = models.DateTimeField(blank=True, null=True)
+    published_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="courses_published",
+    )
 
     class Meta:
         ordering = ("code",)
         indexes = [
             models.Index(fields=("semester", "status"), name="course_sem_status_idx"),
             models.Index(fields=("faculty", "status"), name="course_fac_status_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("code"),
+                name="course_unique_code_ci",
+            ),
         ]
         verbose_name = "Course"
         verbose_name_plural = "Courses"
@@ -86,6 +106,7 @@ class Course(AuditModel):
             raise ValidationError(errors)
 
     def save(self, *args, allow_archived_update=False, **kwargs):
+        self.code = self.code.strip().upper()
         if self.pk and not allow_archived_update:
             previous_status = (
                 type(self).objects.filter(pk=self.pk)
@@ -105,6 +126,138 @@ class Course(AuditModel):
     def __str__(self):
         return f"{self.code} - {self.title}"
 
-    # Teacher and Course Assistant assignments intentionally remain outside
-    # this foundation model. They can be added later as explicit through
-    # models without changing the course metadata contract.
+
+class CourseTemplate(AuditModel):
+    """Reusable, source-independent snapshot of a course structure."""
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    snapshot = models.JSONField(default=dict, editable=False)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        ordering = ("title", "id")
+        verbose_name = "Course template"
+        verbose_name_plural = "Course templates"
+
+    def __str__(self):
+        return self.title
+
+
+class CourseTeachingRole(models.TextChoices):
+    TEACHER = "teacher", "Teacher"
+    TEACHING_ASSISTANT = "teaching_assistant", "Teaching assistant"
+
+
+class CourseLifecycleAction(models.TextChoices):
+    SUBMIT_REVIEW = "submit_review", "Submit for review"
+    RETURN_REVISION = "return_revision", "Return for revision"
+    PUBLISH = "publish", "Publish"
+    ARCHIVE = "archive", "Archive"
+    RESTORE = "restore", "Restore"
+
+
+class CourseTeachingAssignment(AuditModel):
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="teaching_assignments",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="course_teaching_assignments",
+    )
+    role = models.CharField(
+        max_length=30,
+        choices=CourseTeachingRole.choices,
+    )
+    is_primary = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("course", "role", "user")
+        indexes = [
+            models.Index(
+                fields=("course", "role"),
+                name="course_assign_course_role_idx",
+            ),
+            models.Index(
+                fields=("user", "role"),
+                name="course_assign_user_role_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("course", "user"),
+                name="course_unique_teaching_user",
+            ),
+            models.UniqueConstraint(
+                fields=("course",),
+                condition=Q(
+                    role=CourseTeachingRole.TEACHER,
+                    is_primary=True,
+                ),
+                name="course_unique_primary_teacher",
+            ),
+            models.CheckConstraint(
+                check=Q(role=CourseTeachingRole.TEACHER)
+                | Q(is_primary=False),
+                name="course_primary_teacher_only",
+            ),
+        ]
+        verbose_name = "Course teaching assignment"
+        verbose_name_plural = "Course teaching assignments"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.user_id:
+            if not self.user.is_active:
+                errors["user"] = "Only an active user can be assigned."
+            expected_role = (
+                RoleCode.TEACHER
+                if self.role == CourseTeachingRole.TEACHER
+                else RoleCode.TEACHING_ASSISTANT
+            )
+            if not self.user.roles.filter(code=expected_role).exists():
+                errors["user"] = (
+                    f"User must have the {expected_role} role."
+                )
+        if self.is_primary and self.role != CourseTeachingRole.TEACHER:
+            errors["is_primary"] = (
+                "Only a teacher assignment can be primary."
+            )
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f"{self.course.code} - {self.user} ({self.role})"
+
+
+class CourseStatusHistory(AuditModel):
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="status_history",
+    )
+    action = models.CharField(
+        max_length=30,
+        choices=CourseLifecycleAction.choices,
+    )
+    from_status = models.CharField(max_length=20, choices=CourseStatus.choices)
+    to_status = models.CharField(max_length=20, choices=CourseStatus.choices)
+    comment = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [
+            models.Index(
+                fields=("course", "created_at"),
+                name="course_history_course_time_idx",
+            ),
+        ]
+        verbose_name = "Course status history"
+        verbose_name_plural = "Course status history"
+
+    def __str__(self):
+        return f"{self.course.code}: {self.from_status} -> {self.to_status}"
