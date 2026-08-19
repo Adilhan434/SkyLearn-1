@@ -600,7 +600,11 @@ class ScormPackageContentView(generics.GenericAPIView):
             )
         except (BadZipFile, KeyError, OSError, RuntimeError, ValidationError) as exc:
             raise ScormContentUnavailable() from exc
-        content_type = mimetypes.guess_type(normalized_path)[0]
+        content_type = (
+            "application/javascript"
+            if normalized_path.lower().endswith(".js")
+            else mimetypes.guess_type(normalized_path)[0]
+        )
         response = StreamingHttpResponse(
             content,
             content_type=content_type or "application/octet-stream",
