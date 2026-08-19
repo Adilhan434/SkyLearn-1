@@ -14,8 +14,10 @@ RUN python -m pip install --upgrade pip && \
 
 COPY --chown=app:app . .
 
-USER app
+RUN mkdir -p /app/media /app/private_media && \
+    chown -R app:app /app/media /app/private_media
 
 EXPOSE 8000
 
+ENTRYPOINT ["sh", "/app/docker-entrypoint.sh"]
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
