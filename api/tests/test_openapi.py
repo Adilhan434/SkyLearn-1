@@ -14,6 +14,7 @@ class OpenApiTests(APITestCase):
         "/api/v1/users/",
         "/api/v1/users/{id}/",
         "/api/v1/roles/",
+        "/api/v1/references/teachers/",
         "/api/v1/organization/faculties/",
         "/api/v1/organization/departments/",
         "/api/v1/organization/programs/",
