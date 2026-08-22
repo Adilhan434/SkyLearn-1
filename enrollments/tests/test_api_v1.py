@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from accounts.models import Role, RoleCode
+from accounts.models import Role, RoleCode, Student
 from courses.models import (
     Course,
     CourseStatus,
@@ -33,8 +33,17 @@ class EnrollmentAPITests(APITestCase):
         user_model = get_user_model()
         self.admin = user_model.objects.create_user(username="enrollment-admin")
         self.admin.roles.add(Role.objects.get(code=RoleCode.LMS_ADMIN))
-        self.student = user_model.objects.create_user(username="student-2026")
+        self.student = user_model.objects.create_user(
+            username="student-2026",
+            email="student.2026@su.edu.kg",
+            first_name="Student",
+            last_name="2026",
+        )
         self.student.roles.add(Role.objects.get(code=RoleCode.STUDENT))
+        Student.objects.create(
+            student=self.student,
+            id_number="SU-2026-001",
+        )
         self.other_student = user_model.objects.create_user(username="student-2027")
         self.other_student.roles.add(Role.objects.get(code=RoleCode.STUDENT))
         faculty = Faculty.objects.create(name="Engineering", code="ENG")
@@ -99,6 +108,15 @@ class EnrollmentAPITests(APITestCase):
         self.assertEqual(enrollment.source, EnrollmentSource.MANUAL)
         self.assertEqual(enrollment.created_by, self.admin)
         self.assertEqual(enrollment.updated_by, self.admin)
+        self.assertEqual(
+            response.data["student"],
+            {
+                "id": self.student.pk,
+                "full_name": "Student 2026",
+                "email": "student.2026@su.edu.kg",
+                "student_id": "SU-2026-001",
+            },
+        )
 
     def test_list_is_paginated_and_scoped_to_requested_course(self):
         Enrollment.objects.create(student=self.student, course=self.course)
@@ -116,7 +134,15 @@ class EnrollmentAPITests(APITestCase):
             {"count", "next", "previous", "results"},
         )
         self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["student"], self.student.pk)
+        self.assertEqual(
+            response.data["results"][0]["student"],
+            {
+                "id": self.student.pk,
+                "full_name": "Student 2026",
+                "email": "student.2026@su.edu.kg",
+                "student_id": "SU-2026-001",
+            },
+        )
         self.assertEqual(response.data["results"][0]["course"], self.course.pk)
 
     def test_duplicate_active_enrollment_returns_stable_error(self):

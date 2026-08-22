@@ -4,7 +4,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from accounts.models import RoleCode
+from accounts.models import RoleCode, User
 from courses.api.v1.serializers import (
     DepartmentSummarySerializer,
     FacultySummarySerializer,
@@ -27,17 +27,34 @@ from progress.models import LessonProgressStatus
 from progress.services import calculate_course_progress
 
 
+class EnrollmentStudentSerializer(serializers.ModelSerializer):
+    email = serializers.SerializerMethodField()
+    full_name = serializers.SerializerMethodField()
+    student_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ("id", "full_name", "email", "student_id")
+
+    def get_email(self, obj) -> str | None:
+        return obj.email or None
+
+    def get_full_name(self, obj) -> str:
+        return " ".join(filter(None, (obj.first_name, obj.last_name)))
+
+    def get_student_id(self, obj) -> str | None:
+        profile = getattr(obj, "student_profile", None)
+        return profile.id_number if profile else None
+
+
 class EnrollmentSerializer(serializers.ModelSerializer):
-    student = serializers.PrimaryKeyRelatedField(
-        queryset=get_user_model().objects.all(),
-    )
+    student = EnrollmentStudentSerializer(read_only=True)
     course = serializers.PrimaryKeyRelatedField(read_only=True)
     created_by = serializers.PrimaryKeyRelatedField(read_only=True)
     updated_by = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Enrollment
-        validators = []
         fields = (
             "id",
             "student",
@@ -51,15 +68,20 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-        read_only_fields = (
-            "id",
-            "course",
-            "status",
-            "enrolled_at",
-            "created_by",
-            "updated_by",
-            "created_at",
-            "updated_at",
+
+
+class EnrollmentWriteSerializer(serializers.ModelSerializer):
+    student = serializers.PrimaryKeyRelatedField(
+        queryset=get_user_model().objects.all(),
+    )
+
+    class Meta:
+        model = Enrollment
+        validators = []
+        fields = (
+            "student",
+            "source",
+            "external_sis_id",
         )
 
     def validate_student(self, student):

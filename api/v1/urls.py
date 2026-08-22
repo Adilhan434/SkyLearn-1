@@ -10,6 +10,7 @@ urlpatterns = [
     path("auth/", include("accounts.api.v1.auth_urls")),
     path("users/", include("accounts.api.v1.user_urls")),
     path("roles/", include("accounts.api.v1.role_urls")),
+    path("references/", include("accounts.api.v1.reference_urls")),
     path("organization/", include("organization.api.v1.urls")),
     path("student/", include("enrollments.api.v1.student_urls")),
     path("student/", include("progress.api.v1.urls")),

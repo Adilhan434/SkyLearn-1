@@ -10,13 +10,18 @@ from enrollments.permissions import EnrollmentPermission
 from enrollments.services import enroll_student
 
 from .pagination import EnrollmentPagination
-from .serializers import EnrollmentSerializer
+from .serializers import EnrollmentSerializer, EnrollmentWriteSerializer
 
 
 class CourseEnrollmentListCreateView(generics.ListCreateAPIView):
     serializer_class = EnrollmentSerializer
     permission_classes = (EnrollmentPermission,)
     pagination_class = EnrollmentPagination
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return EnrollmentWriteSerializer
+        return EnrollmentSerializer
 
     def get_course(self):
         if not hasattr(self, "course"):
@@ -29,12 +34,18 @@ class CourseEnrollmentListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return (
             Enrollment.objects.filter(course=self.get_course())
-            .select_related("student", "course", "created_by", "updated_by")
+            .select_related(
+                "student",
+                "student__student_profile",
+                "course",
+                "created_by",
+                "updated_by",
+            )
             .order_by("-enrolled_at", "-id")
         )
 
     @extend_schema(
-        request=EnrollmentSerializer,
+        request=EnrollmentWriteSerializer,
         responses={
             200: EnrollmentSerializer,
             201: EnrollmentSerializer,
@@ -53,6 +64,9 @@ class CourseEnrollmentListCreateView(generics.ListCreateAPIView):
             actor=request.user,
         )
         return Response(
-            self.get_serializer(enrollment).data,
+            EnrollmentSerializer(
+                enrollment,
+                context=self.get_serializer_context(),
+            ).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
