@@ -28,7 +28,10 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config("SECRET_KEY")
+SECRET_KEY = config(
+    "SECRET_KEY",
+    default="django-insecure-su-lms-super-secret-key-replace-in-env-1234567890",
+)
 
 # Use a project-specific variable name. Generic DEBUG variables are commonly set
 # by shells, IDEs and deployment tools and may contain non-boolean values.
@@ -37,7 +40,7 @@ DEBUG = config("DJANGO_DEBUG", default=True, cast=bool)
 
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS",
-    default="localhost,127.0.0.1",
+    default="localhost,127.0.0.1,.pythonanywhere.com,*",
     cast=Csv(),
 )
 
@@ -117,16 +120,21 @@ if DEBUG:
 
 from datetime import timedelta
 
-# CORS/CSRF settings for cookie-based frontend authentication. Origins are
-# always explicit because wildcard origins are unsafe with credentials.
+# CORS/CSRF settings for frontend API integration.
+# By default, CORS_ALLOW_ALL_ORIGINS is True so any frontend / client can call the API easily.
+CORS_ALLOW_ALL_ORIGINS = config(
+    "CORS_ALLOW_ALL_ORIGINS",
+    default=True,
+    cast=bool,
+)
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
-    default="http://localhost:5173",
+    default="http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000",
     cast=Csv(),
 )
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
-    default="http://localhost:5173",
+    default="http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000,https://*.pythonanywhere.com",
     cast=Csv(),
 )
 CORS_ALLOW_CREDENTIALS = config(
