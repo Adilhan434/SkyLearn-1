@@ -120,12 +120,15 @@ if DEBUG:
 
 from datetime import timedelta
 
-# CORS/CSRF settings for frontend API integration.
-# By default, CORS_ALLOW_ALL_ORIGINS is True so any frontend / client can call the API easily.
+# CORS/CSRF settings for frontend and third-party API integration.
+# Fully permissive by default so any origin (React, Vue, Vite, Vercel, Netlify, mobile, Postman) can access the API.
 CORS_ALLOW_ALL_ORIGINS = config(
     "CORS_ALLOW_ALL_ORIGINS",
     default=True,
     cast=bool,
+)
+CORS_ALLOW_CREDENTIALS = config(
+    "CORS_ALLOW_CREDENTIALS", default=True, cast=bool
 )
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
@@ -134,26 +137,33 @@ CORS_ALLOWED_ORIGINS = config(
 )
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
-    default="http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000,https://*.pythonanywhere.com",
+    default="http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000,https://*.pythonanywhere.com,https://*.vercel.app",
     cast=Csv(),
-)
-CORS_ALLOW_CREDENTIALS = config(
-    "CORS_ALLOW_CREDENTIALS", default=True, cast=bool
 )
 SECURE_SSL_REDIRECT = config(
     "SECURE_SSL_REDIRECT", default=False, cast=bool
 )
 SESSION_COOKIE_SECURE = config(
-    "SESSION_COOKIE_SECURE", default=not DEBUG, cast=bool
+    "SESSION_COOKIE_SECURE", default=False, cast=bool
 )
 CSRF_COOKIE_SECURE = config(
-    "CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool
+    "CSRF_COOKIE_SECURE", default=False, cast=bool
 )
 SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=0, cast=int)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
     "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False, cast=bool
 )
 SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=False, cast=bool)
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -164,6 +174,15 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'access-control-allow-origin',
+    'access-control-allow-headers',
+    'access-control-allow-methods',
+]
+
+CORS_EXPOSE_HEADERS = [
+    'content-type',
+    'authorization',
+    'x-csrftoken',
 ]
 
 # Provider-neutral OpenID Connect integration. JWT login remains the active

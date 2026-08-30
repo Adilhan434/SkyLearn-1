@@ -53,7 +53,11 @@ class LoginView(APIView):
             update_last_login(None, user)
 
         response = Response(
-            {"user": LoginUserSerializer(user).data},
+            {
+                "user": LoginUserSerializer(user).data,
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+            },
             status=status.HTTP_200_OK,
         )
         set_access_cookie(response, refresh.access_token)
@@ -72,6 +76,9 @@ class RefreshView(APIView):
     def post(self, request):
         cookie_name = settings.SIMPLE_JWT.get("AUTH_COOKIE_REFRESH", "refresh_token")
         refresh_token = request.COOKIES.get(cookie_name)
+        if not refresh_token and isinstance(request.data, dict):
+            refresh_token = request.data.get("refresh")
+
         if not refresh_token:
             return _authentication_error(
                 "Refresh token is missing.",
@@ -85,7 +92,10 @@ class RefreshView(APIView):
             return _authentication_error("Refresh token is invalid or expired.")
 
         response = Response(
-            {"message": "Token refreshed successfully."},
+            {
+                "message": "Token refreshed successfully.",
+                "access": str(serializer.validated_data["access"]),
+            },
             status=status.HTTP_200_OK,
         )
         set_access_cookie(response, serializer.validated_data["access"])
