@@ -48,6 +48,7 @@ def course_read_queryset():
         "faculty",
         "department",
         "program",
+        "group",
     ).prefetch_related(
         Prefetch(
             "teaching_assignments",

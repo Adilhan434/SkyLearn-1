@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from organization.models import Department, Faculty, Program, Semester
+from organization.models import Department, Faculty, Group, Program, Semester
 
 
 class FacultySerializer(serializers.ModelSerializer):
@@ -24,6 +25,18 @@ class ProgramSerializer(serializers.ModelSerializer):
             "name",
             "code",
             "degree_level",
+            "is_active",
+        )
+
+
+class GroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = (
+            "id",
+            "program",
+            "name",
+            "admission_year",
             "is_active",
         )
 

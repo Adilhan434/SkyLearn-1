@@ -232,6 +232,7 @@ class CourseAPITests(APITestCase):
                 "faculty",
                 "department",
                 "program",
+                "group",
                 "cover",
                 "start_date",
                 "end_date",

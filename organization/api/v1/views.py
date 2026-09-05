@@ -3,10 +3,12 @@ from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
 from organization.models import Department, Faculty, Program, Semester
+from organization.models import Department, Faculty, Group, Program, Semester
 
 from .serializers import (
     DepartmentSerializer,
     FacultySerializer,
+    GroupSerializer,
     ProgramSerializer,
     SemesterSerializer,
 )
@@ -40,6 +42,18 @@ class ProgramListView(ActiveOrganizationListView):
     serializer_class = ProgramSerializer
     filter_backends = (DjangoFilterBackend,)
     filterset_fields = ("department",)
+
+
+class GroupListView(ActiveOrganizationListView):
+    queryset = Group.objects.filter(
+        is_active=True,
+        program__is_active=True,
+        program__department__is_active=True,
+        program__department__faculty__is_active=True,
+    )
+    serializer_class = GroupSerializer
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = ("program",)
 
 
 class SemesterListView(ActiveOrganizationListView):

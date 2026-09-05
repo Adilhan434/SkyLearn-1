@@ -17,6 +17,7 @@ from courses.models import (
     CourseTemplate,
 )
 from organization.models import Department, Faculty, Program, Semester
+from organization.models import Department, Faculty, Group, Program, Semester
 
 
 class SemesterSummarySerializer(serializers.ModelSerializer):
@@ -41,6 +42,12 @@ class ProgramSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Program
         fields = ("id", "name", "code")
+
+
+class GroupSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ("id", "name", "admission_year")
 
 
 class TeacherSummarySerializer(serializers.ModelSerializer):
@@ -80,6 +87,7 @@ class CourseListSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
     faculty = FacultySummarySerializer(read_only=True)
     department = DepartmentSummarySerializer(read_only=True)
     program = ProgramSummarySerializer(read_only=True)
+    group = GroupSummarySerializer(read_only=True)
 
     class Meta:
         model = Course
@@ -95,6 +103,7 @@ class CourseListSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
             "faculty",
             "department",
             "program",
+            "group",
             "cover",
             "start_date",
             "end_date",
@@ -108,6 +117,7 @@ class CourseDetailSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
     faculty = FacultySummarySerializer(read_only=True)
     department = DepartmentSummarySerializer(read_only=True)
     program = ProgramSummarySerializer(read_only=True)
+    group = GroupSummarySerializer(read_only=True)
     created_by = serializers.PrimaryKeyRelatedField(read_only=True)
     updated_by = serializers.PrimaryKeyRelatedField(read_only=True)
     published_by = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -126,6 +136,7 @@ class CourseDetailSerializer(PrimaryTeacherMixin, serializers.ModelSerializer):
             "faculty",
             "department",
             "program",
+            "group",
             "status",
             "start_date",
             "end_date",
@@ -256,6 +267,7 @@ class CourseWriteSerializer(serializers.ModelSerializer):
             "faculty",
             "department",
             "program",
+            "group",
             "status",
             "start_date",
             "end_date",
@@ -311,12 +323,14 @@ class CourseWriteSerializer(serializers.ModelSerializer):
             getattr(instance, "department", None),
         )
         program = attrs.get("program", getattr(instance, "program", None))
+        group = attrs.get("group", getattr(instance, "group", None))
         errors = {}
 
         for field_name, organization_object in (
             ("faculty", faculty),
             ("department", department),
             ("program", program),
+            ("group", group),
         ):
             if organization_object and not organization_object.is_active:
                 errors[field_name] = "Selected object must be active."
@@ -329,6 +343,10 @@ class CourseWriteSerializer(serializers.ModelSerializer):
         if department and program and program.department_id != department.id:
             errors["program"] = (
                 "Program must belong to the selected department."
+            )
+        if program and group and group.program_id != program.id:
+            errors["group"] = (
+                "Group must belong to the selected program."
             )
         if errors:
             raise serializers.ValidationError(errors)

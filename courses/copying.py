@@ -13,6 +13,7 @@ from learning.models import (
     ReleaseType,
 )
 from organization.models import Department, Faculty, Program, Semester
+from organization.models import Department, Faculty, Group, Program, Semester
 
 
 SNAPSHOT_VERSION = 1
@@ -129,6 +130,7 @@ def build_course_snapshot(source):
             "faculty_id": source.faculty_id,
             "department_id": source.department_id,
             "program_id": source.program_id,
+            "group_id": source.group_id,
             "cover": _file_name(source.cover),
             "syllabus": _file_name(source.syllabus),
         }
@@ -151,8 +153,18 @@ def _course_values_from_snapshot(snapshot):
     faculty = _active_organization(Faculty, values["faculty_id"])
     department = _active_organization(Department, values["department_id"])
     program = _active_organization(Program, values["program_id"])
+    group = (
+        _active_organization(Group, values["group_id"])
+        if values.get("group_id")
+        else None
+    )
     semester = _active_organization(Semester, values["semester_id"])
     if department.faculty_id != faculty.pk or program.department_id != department.pk:
+    if (
+        department.faculty_id != faculty.pk
+        or program.department_id != department.pk
+        or (group and group.program_id != program.pk)
+    ):
         raise InvalidCourseTemplate()
     return {
         "description": values["description"],
@@ -162,6 +174,7 @@ def _course_values_from_snapshot(snapshot):
         "faculty": faculty,
         "department": department,
         "program": program,
+        "group": group,
         "start_date": parse_date(values["start_date"]),
         "end_date": parse_date(values["end_date"]),
         "cover": values["cover"],

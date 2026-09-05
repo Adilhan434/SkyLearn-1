@@ -18,6 +18,7 @@ class OpenApiTests(APITestCase):
         "/api/v1/organization/faculties/",
         "/api/v1/organization/departments/",
         "/api/v1/organization/programs/",
+        "/api/v1/organization/groups/",
         "/api/v1/organization/semesters/",
         "/api/v1/courses/",
         "/api/v1/courses/{id}/",
@@ -164,6 +165,7 @@ class OpenApiTests(APITestCase):
                 "created_by",
                 "department",
                 "faculty",
+                "group",
                 "language",
                 "ordering",
                 "page",
@@ -190,6 +192,7 @@ class OpenApiTests(APITestCase):
             },
             "/api/v1/organization/departments/": {"faculty"},
             "/api/v1/organization/programs/": {"department"},
+            "/api/v1/organization/groups/": {"program"},
             "/api/v1/student/calendar/": {
                 "course",
                 "date_from",

@@ -8,6 +8,7 @@ from django.db.models.functions import Lower
 from accounts.models import RoleCode
 from audit.models import AuditModel
 from organization.models import Department, Faculty, Program, Semester
+from organization.models import Department, Faculty, Group, Program, Semester
 
 
 class CourseStatus(models.TextChoices):
@@ -58,6 +59,13 @@ class Course(AuditModel):
         on_delete=models.PROTECT,
         related_name="courses",
     )
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="courses",
+    )
     status = models.CharField(
         max_length=20,
         choices=CourseStatus.choices,
@@ -83,6 +91,7 @@ class Course(AuditModel):
         indexes = [
             models.Index(fields=("semester", "status"), name="course_sem_status_idx"),
             models.Index(fields=("faculty", "status"), name="course_fac_status_idx"),
+            models.Index(fields=("group", "status"), name="course_grp_status_idx"),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -102,6 +111,8 @@ class Course(AuditModel):
             errors["department"] = "Department must belong to the selected faculty."
         if self.program_id and self.program.department_id != self.department_id:
             errors["program"] = "Program must belong to the selected department."
+        if self.group_id and self.group.program_id != self.program_id:
+            errors["group"] = "Group must belong to the selected program."
         if errors:
             raise ValidationError(errors)
 

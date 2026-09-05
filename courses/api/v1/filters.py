@@ -16,6 +16,7 @@ class CourseFilter(filters.FilterSet):
     faculty = filters.NumberFilter(field_name="faculty_id")
     department = filters.NumberFilter(field_name="department_id")
     program = filters.NumberFilter(field_name="program_id")
+    group = filters.NumberFilter(field_name="group_id")
     teacher = filters.NumberFilter(method="filter_teacher")
     language = filters.ChoiceFilter(choices=CourseLanguage.choices)
     created_by = filters.NumberFilter(field_name="created_by_id")
@@ -28,6 +29,7 @@ class CourseFilter(filters.FilterSet):
             "faculty",
             "department",
             "program",
+            "group",
             "teacher",
             "language",
             "created_by",

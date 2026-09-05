@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     DepartmentListView,
     FacultyListView,
+    GroupListView,
     ProgramListView,
     SemesterListView,
 )
@@ -13,5 +14,6 @@ urlpatterns = [
     path("faculties/", FacultyListView.as_view(), name="faculty-list"),
     path("departments/", DepartmentListView.as_view(), name="department-list"),
     path("programs/", ProgramListView.as_view(), name="program-list"),
+    path("groups/", GroupListView.as_view(), name="group-list"),
     path("semesters/", SemesterListView.as_view(), name="semester-list"),
 ]

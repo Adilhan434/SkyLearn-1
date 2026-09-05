@@ -5,6 +5,14 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from organization.models import DegreeLevel, Department, Faculty, Program, Semester
+from organization.models import (
+    DegreeLevel,
+    Department,
+    Faculty,
+    Group,
+    Program,
+    Semester,
+)
 
 
 class OrganizationReferenceAPITests(APITestCase):
@@ -54,6 +62,22 @@ class OrganizationReferenceAPITests(APITestCase):
             name="Inactive Program",
             code="OLD",
             degree_level=DegreeLevel.ASSOCIATE,
+            is_active=False,
+        )
+        cls.group = Group.objects.create(
+            program=cls.program,
+            name="SE-24",
+            admission_year=2024,
+        )
+        cls.other_group = Group.objects.create(
+            program=cls.other_program,
+            name="AM-23",
+            admission_year=2023,
+        )
+        cls.inactive_group = Group.objects.create(
+            program=cls.program,
+            name="OLD-GROUP",
+            admission_year=2020,
             is_active=False,
         )
         cls.semester = Semester.objects.create(
@@ -136,6 +160,26 @@ class OrganizationReferenceAPITests(APITestCase):
                     "name": "Software Engineering",
                     "code": "SE",
                     "degree_level": "bachelor",
+                    "is_active": True,
+                }
+            ],
+        )
+
+    def test_groups_can_be_filtered_by_program(self):
+        response = self.client.get(
+            "/api/v1/organization/groups/",
+            {"program": self.program.id},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.json(),
+            [
+                {
+                    "id": self.group.id,
+                    "program": self.program.id,
+                    "name": "SE-24",
+                    "admission_year": 2024,
                     "is_active": True,
                 }
             ],
