@@ -85,9 +85,6 @@ class CourseGroupAPITests(APITestCase):
         }
         response = self.client.post(self.list_create_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIsNotNone(response.data.get("group"))
-        self.assertEqual(response.data["group"]["id"], self.group.pk)
-        self.assertEqual(response.data["group"]["name"], "SE-24")
         self.assertEqual(response.data.get("group"), self.group.pk)
 
         course = Course.objects.get(code="CS105")
@@ -120,7 +117,6 @@ class CourseGroupAPITests(APITestCase):
         self.assertIn("group", response.data["error"]["fields"])
 
     def test_filter_courses_by_group(self):
-        Course.objects.create(
         c1 = Course.objects.create(
             title="Course For Group SE-24",
             code="SE101",
@@ -136,7 +132,6 @@ class CourseGroupAPITests(APITestCase):
             created_by=self.teacher,
             updated_by=self.teacher,
         )
-        Course.objects.create(
         c1.teaching_assignments.create(
             user=self.teacher,
             role=CourseTeachingRole.TEACHER,

@@ -159,7 +159,6 @@ def _course_values_from_snapshot(snapshot):
         else None
     )
     semester = _active_organization(Semester, values["semester_id"])
-    if department.faculty_id != faculty.pk or program.department_id != department.pk:
     if (
         department.faculty_id != faculty.pk
         or program.department_id != department.pk
